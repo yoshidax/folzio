@@ -1,0 +1,585 @@
+/* Display strings for Folzio. Keys must match the rawValue of TextKey. */
+
+/* Reason shown below the input field when the search sheet validates its search root */
+"error.searchRoot.empty" = "Enter a folder to search in";
+
+/* Reason shown below the input field when the search sheet validates its search root */
+"error.searchRoot.notAbsolute" = "Enter a path that begins with / or ~";
+
+/* Reason shown below the input field when the search sheet validates its search root */
+"error.searchRoot.notFound" = "Folder not found";
+
+/* Reason shown below the input field when the search sheet validates its search root */
+"error.searchRoot.notAFolder" = "Not a folder";
+
+/* Reason shown below the input field when the search sheet validates its search root */
+"error.searchRoot.accessDenied" = "Can’t read the folder";
+
+/* Reason the initial location of the search root folder selection panel cannot be determined */
+"error.searchRoot.noUsableFolder" = "No available folder was found";
+
+/* Lead-in for the reason a zip cannot be opened. %1$@ is the reason sentence */
+"error.zip.cannotOpen" = "Can’t open the zip file: %1$@";
+
+/* Reason a zip cannot be opened (the value of error.zip.cannotOpen) */
+"error.zip.notFound" = "The zip file can’t be found";
+
+/* Reason a zip cannot be opened (the value of error.zip.cannotOpen) */
+"error.zip.accessDenied" = "Access denied";
+
+/* Reason a zip cannot be opened (the value of error.zip.cannotOpen) */
+"error.zip.notAZip" = "Not a readable zip file";
+
+/* Reason a zip cannot be opened (the value of error.zip.cannotOpen) */
+"error.zip.multiDisk" = "Split zip archives aren’t supported";
+
+/* Reason an entry in a zip cannot be displayed */
+"error.zip.entryEncrypted" = "Can’t display an encrypted item";
+
+/* Reason an entry in a zip cannot be displayed */
+"error.zip.unsupportedMethod" = "Unsupported compression method";
+
+/* Reason an entry in a zip cannot be displayed */
+"error.zip.tooLarge" = "The image in the zip file is too large to display";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.cannotStartInflate" = "Can’t start decompressing";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.compressedDataDamaged" = "The compressed data is damaged";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.dataTruncated" = "The item data ends unexpectedly";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.compressedDataTruncated" = "The compressed data ends unexpectedly";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.headerDamaged" = "The item header is damaged";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.invalidOffset" = "The item offset is invalid";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.centralDirectoryTooLarge" = "The central directory is too large";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.invalidLocation" = "The item location is invalid";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.entryNotFound" = "The item isn’t in the zip file";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.sizeMismatch" = "The item size doesn’t match";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.dataOutsideFile" = "The item data is outside the file";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.readCancelled" = "Reading was canceled";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.readFailed" = "Couldn’t read the zip file";
+
+/* Reason the contents of a zip are damaged (the value of error.zip.cannotOpen) */
+"error.zip.corrupted.unreadable" = "Can’t load the zip file";
+
+/* Reason a name cannot be used for renaming */
+"error.name.empty" = "Enter a name";
+
+/* Reason a name cannot be used for renaming */
+"error.name.forbiddenCharacter" = "Names can’t contain “/” or “:”";
+
+/* Reason a name cannot be used for renaming */
+"error.name.leadingDot" = "Names can’t begin with “.”";
+
+/* Reason a name cannot be used for renaming */
+"error.name.duplicate" = "An item with this name already exists";
+
+/* Reason a name cannot be used for renaming */
+"error.name.becomesPackage" = "With this name, the folder would be treated as a package and would no longer be shown";
+
+/* Reason a file operation failed */
+"error.operation.noDestination" = "No destination folder is specified";
+
+/* Reason a file operation failed */
+"error.operation.destinationNotFound" = "The destination folder can’t be found";
+
+/* Reason a file operation failed */
+"error.operation.sourceNotFound" = "The item can’t be found";
+
+/* Reason a file operation failed */
+"error.operation.intoItself" = "A folder can’t be moved or copied into itself or one of its subfolders";
+
+/* Reason a file operation failed */
+"error.operation.sameNameExists" = "Stopped because an item with the same name exists";
+
+/* Reason a file operation failed */
+"error.operation.sameNameAtDestination" = "Stopped because an item with the same name exists at the destination";
+
+/* Reason an existing item could not be moved to the Trash. %1$@ is the reason returned by the OS */
+"error.operation.trashExistingFailed" = "Couldn’t move the existing item to the Trash: %1$@";
+
+/* Reason the OS rejected a file operation. %1$@ is the reason returned by the OS (do not re-translate) */
+"error.operation.systemFailure" = "%1$@";
+
+/* Empty state when the media type filter shows only images and the list is empty */
+"empty.filter.images" = "Showing images only: No matching files";
+
+/* Empty state when the media type filter shows only videos and the list is empty */
+"empty.filter.videos" = "Showing videos only: No matching files";
+
+/* Empty state when the folder to open cannot be found */
+"empty.folderNotFound" = "Folder not found";
+
+/* Loading state for the file list and preview */
+"empty.loading" = "Loading…";
+
+/* Empty state while searching */
+"empty.searching" = "Searching…";
+
+/* Empty state for a folder with no supported media files */
+"empty.noMedia" = "No supported media files";
+
+/* Empty state when the search returns no results */
+"empty.noMatches" = "No matching items";
+
+/* Empty state when the folder cannot be read */
+"empty.accessDenied" = "Can’t access this folder";
+
+/* Preview when there is no media file to display */
+"preview.noMedia" = "No media file to display";
+
+/* Title shown when the preview cannot be displayed. %1$@ is the reason */
+"preview.unavailable" = "Can’t display\n%1$@";
+
+/* Reason an animated image cannot be displayed */
+"preview.animationUnavailable" = "Can’t display the animation";
+
+/* Reason the preview cannot be displayed */
+"preview.failure.unreadable" = "Can’t read the file";
+
+/* Reason the preview cannot be displayed */
+"preview.failure.unsupportedFormat" = "Unsupported format";
+
+/* Reason the preview cannot be displayed */
+"preview.failure.corrupted" = "The file is damaged";
+
+/* Fallback kind name (when the OS does not return a kind name) */
+"kind.folder" = "Folder";
+
+/* Fallback kind name (when the OS does not return a kind name) */
+"kind.zipArchive" = "ZIP archive";
+
+/* Settings item in the application menu (ends with … because it opens a dialog) */
+"menu.app.settings" = "Settings…";
+
+/* Quit item in the application menu. Do not translate the app name */
+"menu.app.quit" = "Quit Folzio";
+
+/* Menu bar menu names */
+"menu.file" = "File";
+
+/* File menu items */
+"menu.file.open" = "Open";
+
+/* File menu items */
+"menu.file.showContents" = "Show Contents";
+
+/* File menu items */
+"menu.file.enclosingFolder" = "Enclosing Folder";
+
+/* File menu items */
+"menu.file.revealInFinder" = "Show in Finder";
+
+/* File menu items */
+"menu.file.addToFavorites" = "Add to Favorites";
+
+/* File menu item (ends with … because it opens a dialog) */
+"menu.file.find" = "Find…";
+
+/* File and Edit menu item. Changes to menu.file.removeFromFavorites when a favorite is selected in the tree */
+"menu.file.trash" = "Move to Trash";
+
+/* File and Edit menu item. Used when a favorite is selected in the tree */
+"menu.file.removeFromFavorites" = "Remove from Favorites";
+
+/* Menu bar menu names */
+"menu.edit" = "Edit";
+
+/* Edit menu items */
+"menu.edit.undo" = "Undo";
+
+/* Edit menu items */
+"menu.edit.redo" = "Redo";
+
+/* Edit menu items */
+"menu.edit.cut" = "Cut";
+
+/* Edit menu items */
+"menu.edit.copy" = "Copy";
+
+/* Edit menu items */
+"menu.edit.paste" = "Paste";
+
+/* Edit menu items */
+"menu.edit.movePaste" = "Move Item Here";
+
+/* Edit menu items */
+"menu.edit.duplicate" = "Duplicate";
+
+/* Edit menu items */
+"menu.edit.rename" = "Rename";
+
+/* Edit menu items */
+"menu.edit.selectAll" = "Select All";
+
+/* Menu bar menu names */
+"menu.view" = "View";
+
+/* View menu item. Used when the toolbar is hidden */
+"menu.view.showToolbar" = "Show Toolbar";
+
+/* View menu item. Used when the toolbar is visible */
+"menu.view.hideToolbar" = "Hide Toolbar";
+
+/* View menu items */
+"menu.view.fullScreen" = "Full Screen";
+
+/* View menu items */
+"menu.view.zoomIn" = "Zoom In";
+
+/* View menu items */
+"menu.view.zoomOut" = "Zoom Out";
+
+/* View menu items */
+"menu.view.zoomToFit" = "Zoom to Fit";
+
+/* View menu and toolbar items */
+"menu.view.startSlideshow" = "Start Slideshow";
+
+/* View menu and toolbar items */
+"menu.view.showFileListOnly" = "Show File List Only";
+
+/* View menu and toolbar items */
+"menu.view.showPreviewOnly" = "Show Preview Only";
+
+/* View menu items */
+"menu.view.focusTree" = "Focus Directory Tree";
+
+/* View menu items */
+"menu.view.focusFileList" = "Focus File List";
+
+/* View menu items */
+"menu.view.focusPreview" = "Focus Preview";
+
+/* View menu items */
+"menu.view.goToFavorites" = "Go to Favorites";
+
+/* View mode items in the View menu */
+"menu.view.asThumbnails" = "as Thumbnails";
+
+/* View mode items in the View menu */
+"menu.view.asList" = "as List";
+
+/* View menu items */
+"menu.view.largerThumbnails" = "Larger Thumbnails";
+
+/* View menu items */
+"menu.view.smallerThumbnails" = "Smaller Thumbnails";
+
+/* View menu and toolbar items */
+"menu.view.showImagesOnly" = "Show Images Only";
+
+/* View menu and toolbar items */
+"menu.view.showVideosOnly" = "Show Videos Only";
+
+/* View menu and toolbar items */
+"menu.view.showZipFiles" = "Show Zip Files";
+
+/* View menu submenu */
+"menu.view.sortBy" = "Sort By";
+
+/* Menu bar menu names */
+"menu.go" = "Go";
+
+/* Go menu and toolbar items */
+"menu.go.back" = "Back";
+
+/* Go menu and toolbar items */
+"menu.go.forward" = "Forward";
+
+/* Copy in the context menu (single item). %1$@ is the file name */
+"context.copy.single" = "Copy “%1$@”";
+
+/* Paste in the directory tree's context menu */
+"context.pasteHere" = "Paste Here";
+
+/* Move Item Here in the directory tree's context menu */
+"context.movePasteHere" = "Move Item Here";
+
+/* Toolbar history group name */
+"toolbar.history" = "Back/Forward";
+
+/* Toolbar panes group name */
+"toolbar.panes" = "Panes";
+
+/* Toolbar zoom group name */
+"toolbar.zoomGroup" = "Zoom";
+
+/* Toolbar media type group name */
+"toolbar.mediaType" = "Media Type";
+
+/* Toolbar view mode group name */
+"toolbar.viewMode" = "View";
+
+/* Toolbar and size bar group name */
+"toolbar.size" = "Size";
+
+/* Tooltip and accessibility text for the toolbar and size bar. Include the shortcut */
+"toolbar.thumbnailSize" = "Thumbnail Size (⌃⌘. / ⌃⌘,)";
+
+/* Slideshow tooltip. Includes the shortcut */
+"toolbar.startSlideshowHelp" = "Start Slideshow (⇧⌘S)";
+
+/* Zoom in tooltip. Includes the shortcut */
+"toolbar.zoomInHelp" = "Zoom In (⌘+)";
+
+/* Zoom to Fit tooltip. Includes the shortcut */
+"toolbar.zoomToFitHelp" = "Zoom to Fit (⌘0)";
+
+/* Zoom out tooltip. Includes the shortcut */
+"toolbar.zoomOutHelp" = "Zoom Out (⌘-)";
+
+/* View mode options in the toolbar */
+"toolbar.thumbnails" = "Thumbnails";
+
+/* View mode options in the toolbar */
+"toolbar.list" = "List";
+
+/* Settings window title */
+"settings.window" = "Settings";
+
+/* Section headings in the Settings window */
+"settings.video" = "Video";
+
+/* Checkboxes in the Settings window */
+"settings.autoplay" = "Play videos automatically";
+
+/* Checkboxes in the Settings window */
+"settings.loop" = "Loop videos";
+
+/* Section headings in the Settings window */
+"settings.fileOperations" = "File Operations";
+
+/* Checkboxes in the Settings window */
+"settings.confirm" = "Confirm before copying, moving to the Trash, or removing from Favorites (renaming, moving, and moving tree folders to the Trash are always confirmed)";
+
+/* Section headings in the Settings window */
+"settings.slideshow" = "Slideshow";
+
+/* Interval label in the Settings window */
+"settings.interval" = "Interval";
+
+/* Interval unit (after the number) */
+"settings.seconds" = "seconds";
+
+/* Accessibility label for the interval field */
+"settings.intervalA11y" = "Interval (seconds)";
+
+/* Checkbox and accessibility label in the Settings window */
+"settings.repeat" = "Repeat from the beginning after the last item";
+
+/* Transition label and accessibility label in the Settings window */
+"settings.transition" = "Transition";
+
+/* Transition options */
+"settings.transition.none" = "None";
+
+/* Transition options */
+"settings.transition.crossfade" = "Crossfade";
+
+/* Transition options */
+"settings.transition.slide" = "Slide";
+
+/* Transition options */
+"settings.transition.zoom" = "Zoom";
+
+/* List view column headings. Also used in the sort menu */
+"list.column.name" = "Name";
+
+/* List view column headings. Also used in the sort menu */
+"list.column.creationDate" = "Date Created";
+
+/* List view column headings. Also used in the sort menu */
+"list.column.kind" = "Kind";
+
+/* List view column headings. Also used in the sort menu */
+"list.column.location" = "Location";
+
+/* Selected column in the sort menu (ascending). %1$@ is the column name */
+"list.sort.ascending" = "%1$@ (Ascending)";
+
+/* Selected column in the sort menu (descending). %1$@ is the column name */
+"list.sort.descending" = "%1$@ (Descending)";
+
+/* Accessibility label for the `..` row in the list */
+"list.parentRow" = "Enclosing Folder";
+
+/* Directory tree column heading */
+"tree.column" = "Folders";
+
+/* Fixed row in the directory tree */
+"tree.favorites" = "Favorites";
+
+/* Tooltip for a directory tree row */
+"tree.tooltip.notAccessible" = "Not accessible";
+
+/* Tooltip for a directory tree row */
+"tree.tooltip.notFound" = "Not found";
+
+/* Accessibility label for a name edit field in the directory tree */
+"tree.a11y.favoriteName" = "Favorite name";
+
+/* Accessibility label for a name edit field in the directory tree */
+"tree.a11y.folderName" = "Folder name";
+
+/* Search sheet keyword label, placeholder, and accessibility text */
+"search.keyword" = "Keyword";
+
+/* Search sheet search root label and accessibility text */
+"search.root" = "Search In";
+
+/* Search sheet folder selection button (ends with … because it opens a panel) */
+"search.choose" = "Choose…";
+
+/* Help text for the search sheet folder selection button */
+"search.choose.help" = "Opens the standard folder selection panel";
+
+/* Search sheet search button */
+"search.search" = "Search";
+
+/* Accessibility label for the search sheet error */
+"search.error" = "Error";
+
+/* Search root folder selection panel title */
+"search.panel.title" = "Choose a Folder to Search";
+
+/* Search root folder selection panel message */
+"search.panel.message" = "Choose the folder to search in.";
+
+/* Search root folder selection panel button */
+"search.panel.prompt" = "Choose";
+
+/* Reason the folder selection panel could not be opened */
+"search.panel.failed" = "Couldn’t open the folder selection panel";
+
+/* Completed-state sentence in the search bar. %1$@ is the keyword, %2$@ is the search root folder name, and %3$@ is the count phrase */
+"search.bar.results" = "Results for “%1$@” — %2$@ — %3$@";
+
+/* Searching-state sentence in the search bar. %1$@ is the keyword, %2$@ is the search root folder name, and %3$@ is the count phrase */
+"search.bar.searching" = "Results for “%1$@” — %2$@ — %3$@ Searching…";
+
+/* Title for the rename confirmation */
+"dialog.confirm.rename" = "Rename this item?";
+
+/* Title for the Trash confirmation */
+"dialog.confirm.trash" = "Move to the Trash?";
+
+/* Number of items in the confirmation modal. %1$@ is the formatted count */
+"dialog.confirm.items" = "Items: %1$@";
+
+/* One line per item in the confirmation modal. %1$@ is the file name */
+"dialog.confirm.bullet" = "• %1$@";
+
+/* Remaining item count in the confirmation modal. %1$@ is the formatted count */
+"dialog.confirm.more" = "and %1$@ more";
+
+/* Note shown when folders are moved to the Trash */
+"dialog.confirm.folderTrash" = "Folders are moved to the Trash with their contents";
+
+/* Note shown when folders are copied, moved, or renamed */
+"dialog.confirm.folderProcess" = "Folders are processed with their contents";
+
+/* Destination path in the confirmation modal. %1$@ is the path */
+"dialog.confirm.destination" = "Destination: %1$@";
+
+/* Location path in the confirmation modal. %1$@ is the path */
+"dialog.confirm.location" = "Location: %1$@";
+
+/* Continue button in the confirmation modal */
+"dialog.confirm.continue" = "Continue";
+
+/* The "Don't ask again" option in the confirmation modal */
+"dialog.confirm.dontAsk" = "Don’t ask again";
+
+/* Dialog Cancel button */
+"dialog.cancel" = "Cancel";
+
+/* Dialog OK button */
+"dialog.ok" = "OK";
+
+/* Title for the remove from Favorites confirmation */
+"dialog.favoriteRemove.title" = "Remove from Favorites?";
+
+/* Item in the remove from Favorites confirmation. %1$@ is the favorite's display name */
+"dialog.favoriteRemove.items" = "Item: %1$@";
+
+/* Note in the remove from Favorites confirmation */
+"dialog.favoriteRemove.note" = "The folder itself won’t be changed";
+
+/* Button in the remove from Favorites confirmation */
+"dialog.favoriteRemove.confirm" = "Remove";
+
+/* Conflict dialog title */
+"dialog.conflict.title" = "An item with the same name already exists";
+
+/* Conflicting item count in the conflict dialog. %1$@ is the formatted count */
+"dialog.conflict.items" = "Conflicting items: %1$@";
+
+/* Conflict dialog buttons */
+"dialog.conflict.replace" = "Replace";
+
+/* Conflict dialog buttons */
+"dialog.conflict.keepBoth" = "Keep Both";
+
+/* Conflict dialog buttons */
+"dialog.conflict.stop" = "Stop";
+
+/* The "Apply to All" option in the conflict dialog */
+"dialog.conflict.applyAll" = "Apply to all";
+
+/* Title for the file extension change confirmation */
+"dialog.extension.title" = "Change the extension?";
+
+/* Body of the file extension change confirmation. %1$@ is the file name and %2$@ is the new extension */
+"dialog.extension.message" = "Are you sure you want to change the extension of “%1$@” to “.%2$@”?";
+
+/* Button in the file extension change confirmation */
+"dialog.extension.confirm" = "Change";
+
+/* Title shown when renaming fails */
+"dialog.rename.failed" = "Can’t rename the item";
+
+/* Title shown when a file operation fails */
+"dialog.operation.failed" = "The operation couldn’t be completed";
+
+/* Counts of successful and failed file operations. %1$@ and %2$@ are formatted counts */
+"dialog.operation.summary" = "Succeeded: %1$@ / Failed: %2$@";
+
+/* One failure line for a file operation. %1$@ is the name and %2$@ is the reason */
+"dialog.operation.failureLine" = "%1$@: %2$@";
+
+/* Remaining failure count for file operations. %1$@ is the formatted count */
+"dialog.operation.more" = "and %1$@ more";
+
+/* Accessibility label for a thumbnail image */
+"a11y.thumbnail" = "Thumbnail";
+
+/* Display language in the Settings window */
+"settings.language" = "Language";
+"settings.language.english" = "English";
+"settings.language.japanese" = "日本語";
+
+"preview.scroll.horizontal" = "Horizontal image scroll";
+"preview.scroll.vertical" = "Vertical image scroll";

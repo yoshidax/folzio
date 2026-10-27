@@ -1,0 +1,84 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:my_img_viewer-oss}",
+            "name": "Debug MediaViewerApp",
+            "target": "MediaViewerApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug MediaViewerApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:my_img_viewer-oss}",
+            "name": "Release MediaViewerApp",
+            "target": "MediaViewerApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release MediaViewerApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:my_img_viewer-oss}",
+            "name": "Debug make-fixtures",
+            "target": "make-fixtures",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug make-fixtures"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:my_img_viewer-oss}",
+            "name": "Release make-fixtures",
+            "target": "make-fixtures",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release make-fixtures"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:my_img_viewer-oss}",
+            "name": "Debug make-icon",
+            "target": "make-icon",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug make-icon"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:my_img_viewer-oss}",
+            "name": "Release make-icon",
+            "target": "make-icon",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release make-icon"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:folzio-oss}",
+            "name": "Debug FolzioApp",
+            "target": "FolzioApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug FolzioApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:folzio-oss}",
+            "name": "Release FolzioApp",
+            "target": "FolzioApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release FolzioApp"
+        }
+    ]
+}
