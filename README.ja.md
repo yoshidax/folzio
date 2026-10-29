@@ -29,7 +29,8 @@ macOS 15 以降 · Apple silicon 専用 · 英語・日本語対応 · ネット
 アプリは GitHub Releases から入手できます。macOS 15 以降の Apple silicon Mac が必要です。
 Intel Mac は対象外です。
 
-1. このリポジトリの **Releases** ページを開き、目的のリリースから `Folzio-vX.Y.Z-macos-arm64.zip` をダウンロードします。
+1. [Releases ページ](https://github.com/yoshidax/folzio/releases)を開き、目的のリリースから
+   `Folzio-vX.Y.Z-macos-arm64.zip` をダウンロードします。
 2. ZIP を展開して `Folzio.app` をアプリケーションフォルダへ移動し、開きます。
 3. このアプリは Developer ID 署名と Apple の公証を受けていません。macOS にブロックされた場合、配布元を信頼できると判断したうえで、
    システム設定 → プライバシーとセキュリティの **このまま開く** を選び、確認します。
