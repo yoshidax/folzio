@@ -9,6 +9,8 @@ Browse a folder of photos, animated images, and video clips, then organize files
 
 macOS 15 or later · Apple silicon only · English and Japanese · Works locally without network communication · [MIT License](LICENSE)
 
+![Folzio showing a folder tree, image thumbnails, and a photo preview](docs/images/screenshot.png)
+
 ## Features
 
 - **Keep the whole folder in view.** Navigate folders, scan thumbnails or a file list, and preview the selected item
