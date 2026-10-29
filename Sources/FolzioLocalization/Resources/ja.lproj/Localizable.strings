@@ -226,6 +226,9 @@
 "menu.edit.movePaste" = "移動ペースト";
 
 /* Edit menu items */
+"menu.edit.copyPathname" = "パス名をコピー";
+
+/* Edit menu items */
 "menu.edit.duplicate" = "複製";
 
 /* Edit menu items */

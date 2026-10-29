@@ -170,6 +170,7 @@ the choice takes effect immediately and is saved for the next launch. macOS-prov
 | Move to Trash | ⌘Delete |
 | Open the selected item | ⌘O |
 | Show in Finder | Context menu / File menu |
+| Copy the absolute path of the selected item as text ("Copy as Pathname" (パス名をコピー). One file, folder, or zip file in the list, or a folder in the tree including home, volume roots, and favorites. Not available for several selected rows, the `..` row, items inside a zip, or the "Favorites" heading) | ⌥⌘C, Edit menu, context menu |
 | Show the contents of a folder, a zip file, or a directory inside a zip | Double-click, ⌘↓, "Show Contents" in the context menu |
 | Go up one level (at the top of a zip, to the list of the folder containing it; does nothing at the top level of home or a volume) | ⌘↑, double-click the `..` row at the top, "Enclosing Folder" (上の階層へ) in the context menu |
 | Sort | Click a column header, View menu → Sort By |

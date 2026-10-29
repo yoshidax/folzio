@@ -10,6 +10,8 @@ public enum TreeItemRole: Sendable, Equatable {
 
 public enum TreeContextMenuItem: Sendable, Equatable {
     case pasteHere, movePasteHere, addToFavorites, revealInFinder, removeFromFavorites
+    /// Copies the absolute path of the row as a string (FR-182)
+    case copyPathname
     /// Moves a tree folder to the Trash (FR-079)
     case moveToTrash
     /// Renames a favorite item (FR-099)
@@ -64,6 +66,17 @@ public enum FavoriteCommands {
         return url
     }
 
+    /// Folder whose absolute path Copy as Pathname puts on the pasteboard (FR-182). Returns a URL for `.folder`
+    /// (including the home and volume roots) and `.favorite`. Returns nil for `.favoritesHeader` and nil.
+    public static func pathnameTarget(_ role: TreeItemRole?) -> URL? {
+        switch role {
+        case .folder(let url), .favorite(let url):
+            return url
+        case .favoritesHeader, nil:
+            return nil
+        }
+    }
+
     /// Context menu items and their order. `.favoritesHeader` returns an empty array (no menu).
     /// For rows where `trashTarget` returns a URL, places `.moveToTrash` and `.renameFolder` first, each followed by
     /// a separator (A-37). The default value of `roots` is empty, which omits `.moveToTrash` and `.renameFolder`.
@@ -71,12 +84,12 @@ public enum FavoriteCommands {
         switch role {
         case .folder:
             let items: [TreeContextMenuItem] =
-                [.pasteHere, .movePasteHere, .separator, .addToFavorites, .separator, .revealInFinder]
+                [.pasteHere, .movePasteHere, .separator, .addToFavorites, .separator, .copyPathname, .revealInFinder]
             return trashTarget(role, roots: roots) != nil
                 ? [.moveToTrash, .separator, .renameFolder, .separator] + items
                 : items
         case .favorite:
-            return [.renameFavorite, .removeFromFavorites]
+            return [.renameFavorite, .removeFromFavorites, .separator, .copyPathname]
         case .favoritesHeader:
             return []
         }

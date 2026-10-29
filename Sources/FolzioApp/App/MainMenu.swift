@@ -175,6 +175,17 @@ final class MainMenu {
         movePasteItem.keyEquivalentModifierMask = [.command, .option]
         movePasteItem.target = nil
         editMenu.addItem(movePasteItem)
+
+        // Both FileListViewController and DirectoryTreeViewController implement copyPathname(_:); the responder
+        // chain picks the focused pane's (FR-184).
+        let copyPathnameItem = NSMenuItem(
+            title: l10n.text(.menuEditCopyPathname),
+            action: #selector(FileListViewController.copyPathname(_:)),
+            keyEquivalent: "c"
+        )
+        copyPathnameItem.keyEquivalentModifierMask = [.command, .option]
+        copyPathnameItem.target = nil
+        editMenu.addItem(copyPathnameItem)
         editMenu.addItem(.separator())
 
         let duplicateItem = NSMenuItem(
@@ -314,7 +325,7 @@ final class MainMenu {
             (revealItem, .menuFileRevealInFinder), (addFavoriteItem, .menuFileAddToFavorites),
             (searchItem, .menuFileFind), (fileTrashItem, .menuFileTrash),
             (editMenuItem, .menuEdit), (redoItem, .menuEditRedo),
-            (movePasteItem, .menuEditMovePaste), (duplicateItem, .menuEditDuplicate),
+            (movePasteItem, .menuEditMovePaste), (copyPathnameItem, .menuEditCopyPathname), (duplicateItem, .menuEditDuplicate),
             (renameItem, .menuEditRename), (editTrashItem, .menuFileTrash),
             (viewMenuItem, .menuView), (toolbarItem, .menuViewShowToolbar),
             (fullScreenItem, .menuViewFullScreen), (zoomInItem, .menuViewZoomIn),

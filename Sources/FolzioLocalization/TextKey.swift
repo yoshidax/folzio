@@ -103,6 +103,7 @@ public enum TextKey: String, CaseIterable, Sendable {
     case menuEditCopy = "menu.edit.copy"
     case menuEditPaste = "menu.edit.paste"
     case menuEditMovePaste = "menu.edit.movePaste"
+    case menuEditCopyPathname = "menu.edit.copyPathname"
     case menuEditDuplicate = "menu.edit.duplicate"
     case menuEditRename = "menu.edit.rename"
     case menuEditSelectAll = "menu.edit.selectAll"
@@ -346,7 +347,7 @@ public enum TextKey: String, CaseIterable, Sendable {
              .menuFileTrash, .menuFileRemoveFromFavorites:
             return "File menu items (the Trash and Remove from Favorites items swap depending on the state)"
         case .menuEditUndo, .menuEditRedo, .menuEditCut, .menuEditCopy, .menuEditPaste,
-             .menuEditMovePaste, .menuEditDuplicate, .menuEditRename, .menuEditSelectAll:
+             .menuEditMovePaste, .menuEditCopyPathname, .menuEditDuplicate, .menuEditRename, .menuEditSelectAll:
             return "Edit menu items"
         case .menuViewShowToolbar, .menuViewHideToolbar:
             return "Toolbar visibility toggle in the View menu (the item swaps depending on the state)"

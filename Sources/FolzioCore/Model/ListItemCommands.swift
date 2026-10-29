@@ -43,6 +43,12 @@ public struct ListItemCommands: Sendable, Equatable {
         !isBrowsingArchive && kind != .parent
     }
 
+    /// Copy as Pathname. Needs exactly one selected row that is a file operation target, so a zip's contents and
+    /// `..` are excluded (FR-073, FR-183).
+    public func allowsCopyPathname(selectionCount: Int) -> Bool {
+        allowsFileOperations && selectionCount == 1
+    }
+
     /// Paste and Move Item Here into the list. Unavailable inside a zip and while showing search results.
     public var allowsPaste: Bool {
         !isBrowsingArchive && !isShowingSearchResults

@@ -226,6 +226,9 @@
 "menu.edit.movePaste" = "Move Item Here";
 
 /* Edit menu items */
+"menu.edit.copyPathname" = "Copy as Pathname";
+
+/* Edit menu items */
 "menu.edit.duplicate" = "Duplicate";
 
 /* Edit menu items */

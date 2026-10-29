@@ -11,6 +11,7 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
     private let movePasteItem = NSMenuItem()
     private let openContainerItem = NSMenuItem()
     private let goUpItem = NSMenuItem()
+    private let copyPathnameItem = NSMenuItem()
 
     init(host: FileListViewController) {
         self.host = host
@@ -112,6 +113,14 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         copyItem.keyEquivalentModifierMask = [.command]
         copyItem.target = host
         menu.addItem(copyItem)
+
+        copyPathnameItem.title = l10n.text(.menuEditCopyPathname)
+        MainMenu.bind(copyPathnameItem, .menuEditCopyPathname)
+        copyPathnameItem.action = #selector(FileListViewController.copyPathname(_:))
+        copyPathnameItem.keyEquivalent = "c"
+        copyPathnameItem.keyEquivalentModifierMask = [.command, .option]
+        copyPathnameItem.target = host
+        menu.addItem(copyPathnameItem)
 
         pasteItem.title = l10n.text(.menuEditPaste)
         MainMenu.bind(pasteItem, .menuEditPaste)

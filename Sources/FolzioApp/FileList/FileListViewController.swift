@@ -857,6 +857,18 @@ final class FileListViewController: NSViewController {
         pasteboard.writeObjects(urls as [NSURL])
     }
 
+    /// Copy as Pathname: puts the absolute path of the single selected item on the pasteboard as a string
+    /// (FR-181). Does not touch the selection, focus, or preview (FR-185).
+    @objc func copyPathname(_ sender: Any?) {
+        let urls = selectedFileURLs
+        guard !isEditingText,
+              selectionItemCommands.allowsCopyPathname(selectionCount: urls.count),
+              let url = urls.first else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(url.path, forType: .string)
+    }
+
     @objc func paste(_ sender: Any?) {
         guard focusedItemCommands.allowsPaste else { return }
         guard !isEditingText else { return }
@@ -1054,6 +1066,9 @@ extension FileListViewController: NSMenuItemValidation {
             if !commands.allowsFileOperations { return false }
         case #selector(rename(_:)):
             if !focusedItemCommands.allowsFileOperations { return false }
+        case #selector(copyPathname(_:)):
+            return !isEditingText
+                && commands.allowsCopyPathname(selectionCount: selectedFileURLs.count)
         case #selector(paste(_:)), #selector(movePaste(_:)):
             if !commands.allowsPaste { return false }
         default:

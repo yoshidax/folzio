@@ -176,4 +176,36 @@ struct ListItemCommandsTests {
             }
         }
     }
+
+    // MARK: - Copy as Pathname (FR-181, FR-183)
+
+    @Test("Copy as Pathname needs exactly one selected non-parent row outside a zip")
+    func copyPathnameOutsideArchive() {
+        for kind in [ListItemKind.media(.jpeg), .media(.mp4), .archive, .folder] {
+            let commands = ListItemCommands(kind: kind, isBrowsingArchive: false)
+            #expect(commands.allowsCopyPathname(selectionCount: 1) == true, "kind=\(kind)")
+            #expect(commands.allowsCopyPathname(selectionCount: 0) == false, "kind=\(kind)")
+            #expect(commands.allowsCopyPathname(selectionCount: 2) == false, "kind=\(kind)")
+        }
+    }
+
+    @Test("Copy as Pathname is available for search results")
+    func copyPathnameInSearchResults() {
+        let commands = ListItemCommands(kind: .folder, isBrowsingArchive: false, isShowingSearchResults: true)
+        #expect(commands.allowsCopyPathname(selectionCount: 1) == true)
+    }
+
+    @Test("Copy as Pathname is unavailable for the .. row and for everything inside a zip")
+    func copyPathnameUnavailable() {
+        #expect(
+            ListItemCommands(kind: .parent, isBrowsingArchive: false, hasEnclosingLevel: true)
+                .allowsCopyPathname(selectionCount: 1) == false
+        )
+        for kind in Self.allKinds {
+            #expect(
+                ListItemCommands(kind: kind, isBrowsingArchive: true).allowsCopyPathname(selectionCount: 1) == false,
+                "kind=\(kind)"
+            )
+        }
+    }
 }

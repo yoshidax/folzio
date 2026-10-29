@@ -231,6 +231,14 @@ final class DirectoryTreeViewController: NSViewController {
         return item as? Node
     }
 
+    /// Absolute path that Copy as Pathname puts on the pasteboard for a menu item or the selected row. Nil for the
+    /// heading, no selection, and a favorite whose folder was found missing (FR-182, FR-183).
+    private func pathnameTarget(for sender: Any?) -> URL? {
+        let item = targetItem(for: sender)
+        if let entry = item as? FavoriteEntry, entry.availability == .missing { return nil }
+        return FavoriteCommands.pathnameTarget(role(for: item))
+    }
+
     /// Items are rebuilt in menuNeedsUpdate according to the target row's role.
     private func makeContextMenu() -> NSMenu {
         let menu = NSMenu(title: "")
@@ -255,6 +263,13 @@ final class DirectoryTreeViewController: NSViewController {
                 keyEquivalent: "t"
             )
             menuItem.keyEquivalentModifierMask = [.command, .control]
+        case .copyPathname:
+            menuItem = NSMenuItem(
+                title: l10n.text(.menuEditCopyPathname),
+                action: #selector(copyPathname(_:)),
+                keyEquivalent: "c"
+            )
+            menuItem.keyEquivalentModifierMask = [.command, .option]
         case .revealInFinder:
             menuItem = NSMenuItem(title: l10n.text(.menuFileRevealInFinder), action: #selector(revealInFinder(_:)), keyEquivalent: "")
         case .removeFromFavorites:
@@ -684,6 +699,15 @@ final class DirectoryTreeViewController: NSViewController {
         case .none:
             break
         }
+    }
+
+    /// Copy as Pathname from the context menu (the right-clicked row) or Edit > Copy as Pathname (the selected row).
+    /// Does not change the tree selection (A-21, FR-185).
+    @objc func copyPathname(_ sender: Any?) {
+        guard editingTarget == nil, let url = pathnameTarget(for: sender) else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(url.path, forType: .string)
     }
 
     @objc private func revealInFinder(_ sender: Any?) {
@@ -1630,6 +1654,7 @@ extension DirectoryTreeViewController: NSMenuItemValidation {
                  #selector(paste(_:)),
                  #selector(movePaste(_:)),
                  #selector(revealInFinder(_:)),
+                 #selector(copyPathname(_:)),
                  #selector(addToFavorites(_:)),
                  #selector(removeFavoriteFromMenu(_:)):
                 return false
@@ -1654,6 +1679,8 @@ extension DirectoryTreeViewController: NSMenuItemValidation {
                 && FileContextMenu.pasteboardHasFileURLs()
         case #selector(revealInFinder(_:)):
             return fileTargetNode(for: menuItem) != nil
+        case #selector(copyPathname(_:)):
+            return pathnameTarget(for: menuItem) != nil
         case #selector(moveToTrash(_:)):
             // For a favorite item, ⌘⌫ is Remove from Favorites (FR-064); for a non-root folder, it is Move to Trash
             // (FR-079).
