@@ -149,8 +149,10 @@ Tests/
   FolzioPerformanceTests/  # 性能基準
 scripts/
   make-app.sh              # .app の組み立てと署名
+  make-icon.sh             # アプリアイコンの生成
   make-fixtures.sh         # フィクスチャ生成
   make-webp-fixtures.sh    # 同梱 WebP の再生成
+  check-no-archive-writes.sh # アーカイブコードで書き込み API を使わないことの確認
   check-no-network.sh      # ネットワーク API 非依存の確認
   check-readme-sync.sh     # README.md と README.ja.md の同期の確認
 ```

@@ -149,8 +149,10 @@ Tests/
   FolzioPerformanceTests/  # Performance baselines
 scripts/
   make-app.sh              # Assembles and signs the .app
+  make-icon.sh             # Generates the app icon
   make-fixtures.sh         # Generates fixtures
   make-webp-fixtures.sh    # Regenerates the bundled WebP files
+  check-no-archive-writes.sh # Checks that archive code does not use write APIs
   check-no-network.sh      # Checks that no network APIs are used
   check-readme-sync.sh     # Checks that README.md and README.ja.md are in sync
 ```
