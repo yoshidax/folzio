@@ -26,6 +26,168 @@ struct BrowserModelSearchTests {
         #expect(env.model.listing.files.map(\.url) == [kept.url])
     }
 
+    // MARK: - Zip Files in Search Results (TAK-51; FR-278–281)
+
+    private final class EventLog {
+        var events: [LocationEvent] = []
+    }
+
+    /// Creates a real zip (with `01.jpg`) and returns the same row the searcher produces for it.
+    private func archiveResult(_ env: Env, _ path: String) throws -> MediaFile {
+        let url = env.url(path)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try ZipFixtureWriter.write(
+            [ZipFixtureEntry(name: "01.jpg", content: .bytes(Data(count: 16)), method: .stored)],
+            to: url
+        )
+        return DirectoryLister.archiveRow(at: url, kindNames: FixtureKit.kindNames)
+    }
+
+    @Test("A search fixes whether it matches zip files from the setting at its start")
+    func searchPassesZipSettingAtStart() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        env.model.startSearch(pattern(), root: env.root)
+        env.model.setShowsZipFiles(true)
+        env.model.startSearch(pattern(), root: env.root)
+
+        #expect(env.searcher.includesArchives == [false, true])
+    }
+
+    @Test("Toggling the zip setting during a search leaves its results and count unchanged (FR-278)")
+    func togglingZipSettingKeepsExistingResults() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let zip = try archiveResult(env, "trip/day1/photos.zip")
+        let image = try env.makeResult("trip/day2/photo.jpg")
+
+        // Started with zip files on, then switched off while results are shown.
+        env.model.setShowsZipFiles(true)
+        env.model.startSearch(pattern("photo"), root: env.root)
+        await send([zip, image], env, expecting: 2)
+        env.model.setShowsZipFiles(false)
+        #expect(Set(names(env.model)) == ["photos.zip", "photo.jpg"])
+        #expect(env.model.listing.search?.totalCount == 2)
+        await finish(env)
+        #expect(Set(names(env.model)) == ["photos.zip", "photo.jpg"])
+
+        // Started with zip files off, then switched on while results are shown.
+        env.model.startSearch(pattern("photo"), root: env.root)
+        await send([image], env, expecting: 1)
+        env.model.setShowsZipFiles(true)
+        #expect(names(env.model) == ["photo.jpg"])
+        #expect(env.model.listing.search?.totalCount == 1)
+        #expect(env.searcher.includesArchives == [true, false])
+    }
+
+    @Test("Results that contain only zip files are not empty, and selecting one clears the preview (FR-279)")
+    func zipOnlyResultsAreListed() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let zip = try archiveResult(env, "trip/day1/photos.zip")
+        env.model.setShowsZipFiles(true)
+        env.model.startSearch(pattern("photos"), root: env.root)
+        await send([zip], env, expecting: 1)
+        await finish(env)
+
+        #expect(env.model.listing.state == .loaded)
+        #expect(names(env.model) == ["photos.zip"])
+        env.model.select([zip.url], focused: zip.url)
+        #expect(isEmptyPreview(env.model.preview))
+    }
+
+    @Test("The media type filter keeps zip rows and shows the filtered message when no media remains (FR-279)")
+    func mediaTypeFilterKeepsZipRows() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let zip = try archiveResult(env, "trip/day1/photos.zip")
+        let video = try env.makeResult("trip/day2/photo.mov")
+        env.model.setShowsZipFiles(true)
+        env.model.startSearch(pattern("photo"), root: env.root)
+        await send([zip, video], env, expecting: 2)
+
+        env.model.setMediaTypeFilter(MediaTypeFilter(imagesOnly: true))
+
+        #expect(names(env.model) == ["photos.zip"])
+        #expect(env.model.listing.state == .noMatches)
+        #expect(env.model.listing.search?.totalCount == 2)
+    }
+
+    @Test("Opening a zip row ends the search, makes its folder current, syncs the tree, and reports it (FR-280)")
+    func openingZipFromSearchResults() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let zip = try archiveResult(env, "trip/day1/photos.zip")
+        env.model.setShowsZipFiles(true)
+        await env.model.selectFolder(env.root)
+        let log = EventLog()
+        env.model.onLocationEvent = { log.events.append($0) }
+
+        env.model.startSearch(pattern("photos"), root: env.root)
+        await send([zip], env, expecting: 1)
+        await env.model.openItem(zip.url)
+
+        let folder = path(env.folder("trip/day1"))
+        #expect(!env.model.isShowingSearchResults)
+        #expect(env.model.isBrowsingArchive)
+        #expect(path(env.model.listing.archive?.archive) == path(zip.url))
+        #expect(env.model.listing.archive?.directory == "")
+        #expect(path(env.model.listing.folder) == folder)
+        #expect(path(env.model.treeSyncRequest?.folder) == folder)
+        #expect(path(env.lastFolder) == folder)
+        #expect(names(env.model).contains("01.jpg"))
+        #expect(log.events.contains { event in
+            if case .openedSearchResultFolder = event { return true }
+            return false
+        })
+        #expect(await waitUntil { env.searcher.cancelledCount == 1 })
+    }
+
+    @Test("Opening a zip from a regular listing is still a normal navigation")
+    func openingZipFromRegularListingIsNavigation() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        _ = try archiveResult(env, "photos.zip")
+        env.model.setShowsZipFiles(true)
+        await env.model.selectFolder(env.root)
+        let log = EventLog()
+        env.model.onLocationEvent = { log.events.append($0) }
+
+        let zip = try #require(env.model.listing.files.first { $0.name == "photos.zip" })
+        await env.model.openItem(zip.url)
+
+        #expect(env.model.isBrowsingArchive)
+        #expect(path(env.model.listing.folder) == path(env.root))
+        #expect(log.events.count == 1)
+        if case .navigated = log.events[0] {} else { Issue.record("Expected a navigated event: \(log.events)") }
+    }
+
+    @Test("A renamed zip row stays while it keeps the .zip extension and is removed otherwise (FR-281)")
+    func renamingZipRow() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let zip = try archiveResult(env, "trip/day1/photos.zip")
+        let image = try env.makeResult("trip/day2/photo.jpg")
+        env.model.setShowsZipFiles(true)
+        env.model.startSearch(pattern("photo"), root: env.root)
+        await send([zip, image], env, expecting: 2)
+
+        // The new name no longer matches the keyword, but the row stays (as for files).
+        let renamed = env.url("trip/day1/album.ZIP")
+        env.model.didRenameItem(at: zip.url, to: renamed)
+        #expect(Set(names(env.model)) == ["album.ZIP", "photo.jpg"])
+        let row = try #require(env.model.listing.files.first { $0.url == renamed })
+        #expect(row.kind == .archive)
+
+        env.model.didRenameItem(at: renamed, to: env.url("trip/day1/album.txt"))
+        #expect(names(env.model) == ["photo.jpg"])
+        #expect(env.model.listing.search?.totalCount == 1)
+    }
+
     // MARK: - Fixtures
 
     /// Temporary folder `root`. Contains `cover.jpg`, `trip/day1/1.jpg`, `trip/day2/`, and `empty/`.
@@ -466,6 +628,26 @@ struct BrowserModelSearchTests {
         #expect(env.model.listing.search?.totalCount == 1)
     }
 
+    @Test("A case-only file rename updates the search row and its selection")
+    func caseOnlyFileRenameInSearch() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let photo = try env.makeResult("s/photo.jpg")
+        env.model.startSearch(pattern(), root: env.root)
+        await send([photo], env, expecting: 1)
+        env.model.select([photo.url], focused: photo.url)
+        let target = env.url("s/Photo.jpg")
+        let result = await FileOperationService().execute(
+            FileOperation(kind: .rename(newName: "Photo.jpg"), sources: [photo.url]), resolution: .abort
+        )
+        #expect(result.failed.isEmpty)
+        env.model.didRenameItem(at: photo.url, to: target)
+        #expect(names(env.model) == ["Photo.jpg"])
+        #expect(env.model.listing.files.first?.url.path == target.path)
+        #expect(env.model.selection.selected == [target])
+        #expect(env.model.selection.focused?.path == target.path)
+    }
+
     @Test("didRenameItem replaces and resorts the row, updates selected URLs, and removes unsupported media")
     func renamingResults() async throws {
         let env = try makeEnv()
@@ -840,7 +1022,7 @@ struct BrowserModelSearchTests {
         await finish(env)
 
         env.model.sortOrder = SortOrder(column: .name, ascending: true)
-        #expect(names(env.model) == ["2024_Kyoto", "m_Kyoto.jpg", "n_Kyoto.mp4", "zzz_Kyoto"])
+        #expect(names(env.model) == ["2024_Kyoto", "zzz_Kyoto", "m_Kyoto.jpg", "n_Kyoto.mp4"])
 
         env.model.sortOrder = SortOrder(column: .creationDate, ascending: true)
         #expect(names(env.model) == ["m_Kyoto.jpg", "n_Kyoto.mp4", "2024_Kyoto", "zzz_Kyoto"])
@@ -1155,7 +1337,7 @@ struct BrowserModelSearchTests {
 
         // When sorting by Name, re-sort with the new name.
         env.model.sortOrder = SortOrder(column: .name, ascending: true)
-        #expect(names(env.model) == ["g.jpg", "zzz"])
+        #expect(names(env.model) == ["zzz", "g.jpg"])
     }
 
     @Test("Deleting a folder after renaming its row removes both the row and its descendant results")
@@ -1513,9 +1695,15 @@ private final class FakeSearcher: FileNameSearching, @unchecked Sendable {
     private var continuations: [AsyncStream<[MediaFile]>.Continuation] = []
     private var _requests: [(root: URL, pattern: SearchPattern, matchesRoot: Bool, visits: SearchVisitLog)] = []
     private var _cancelledCount = 0
+    private var _includesArchives: [Bool] = []
 
     var requests: [(root: URL, pattern: SearchPattern, matchesRoot: Bool, visits: SearchVisitLog)] {
         lock.withLock { _requests }
+    }
+
+    /// `SearchRequest.includesArchives` of each started search, in order.
+    var includesArchives: [Bool] {
+        lock.withLock { _includesArchives }
     }
 
     var cancelledCount: Int {
@@ -1531,6 +1719,7 @@ private final class FakeSearcher: FileNameSearching, @unchecked Sendable {
         lock.withLock {
             continuations.append(continuation)
             _requests.append((request.root, request.pattern, request.matchesRoot, request.visits))
+            _includesArchives.append(request.includesArchives)
         }
         return stream
     }

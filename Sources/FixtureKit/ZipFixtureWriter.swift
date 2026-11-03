@@ -383,9 +383,15 @@ public enum ZipFixtureWriter {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone.current
         let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-        let year = min(max(parts.year ?? 1980, 1980), 2107)
-        let dosDate = UInt16((year - 1980) << 9 | (parts.month ?? 1) << 5 | (parts.day ?? 1))
-        let dosTime = UInt16((parts.hour ?? 0) << 11 | (parts.minute ?? 0) << 5 | ((parts.second ?? 0) / 2))
+        // Split into typed parts: older compilers cannot type-check the combined expression in reasonable time.
+        let year: Int = min(max(parts.year ?? 1980, 1980), 2107)
+        let month: Int = parts.month ?? 1
+        let day: Int = parts.day ?? 1
+        let hour: Int = parts.hour ?? 0
+        let minute: Int = parts.minute ?? 0
+        let halfSecond: Int = (parts.second ?? 0) / 2
+        let dosDate = UInt16(((year - 1980) << 9) | (month << 5) | day)
+        let dosTime = UInt16((hour << 11) | (minute << 5) | halfSecond)
         return (dosTime, dosDate)
     }
 

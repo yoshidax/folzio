@@ -430,18 +430,18 @@ struct HistoryNavigatorTests {
         #expect(archiveDirectory(env.navigator) == "sub/")
     }
 
-    @Test("Renaming replaces the current location and removes other affected entries (EC-61)")
-    func renamedFolderUpdatesHistory() async throws {
+    @Test("Renaming replaces the current location and removes other affected entries (EC-61)", arguments: ["B2", "b"])
+    func renamedFolderUpdatesHistory(newName: String) async throws {
         let env = try Env()
         defer { env.cleanup() }
 
         await env.select("A")
         await env.select("B")
-        try FileManager.default.moveItem(at: env.url("B"), to: env.url("B2"))
-        env.model.didRenameFolder(from: env.url("B"), to: env.url("B2"))
-        env.navigator.didRenameFolder(from: env.url("B"), to: env.url("B2"))
+        try FileManager.default.moveItem(at: env.url("B"), to: env.url(newName))
+        env.model.didRenameFolder(from: env.url("B"), to: env.url(newName))
+        env.navigator.didRenameFolder(from: env.url("B"), to: env.url(newName))
 
-        #expect(name(env.navigator) == "B2")
+        #expect(name(env.navigator) == newName)
         #expect(env.navigator.history.backEntries.map(\.location.folder.lastPathComponent) == ["A"])
     }
 

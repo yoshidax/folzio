@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-version="${FOLZIO_VERSION:-0.1.0}"
+version="${FOLZIO_VERSION:-1.0.0}"
 build_number="${FOLZIO_BUILD_NUMBER:-1}"
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || ! "$build_number" =~ ^[0-9]+$ ]]; then
     echo "Invalid app version or build number" >&2

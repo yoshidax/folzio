@@ -78,6 +78,7 @@ extension Localizer {
         case let .invalidName(failure): return text(for: failure)
         case .sameNameExists: return text(.errorOperationSameNameExists)
         case .sameNameAtDestination: return text(.errorOperationSameNameAtDestination)
+        case .replacementContainsSource: return text(.errorOperationReplacementContainsSource)
         case let .trashExistingFailed(systemReason):
             return text(.errorOperationTrashExistingFailed, .text(systemReason))
         case let .systemFailure(systemReason):

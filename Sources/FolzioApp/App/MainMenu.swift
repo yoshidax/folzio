@@ -1,4 +1,5 @@
 import AppKit
+import FolzioCore
 import FolzioLocalization
 
 /// Resets the item title that the tree changed to Remove from Favorites during validation back to Move to Trash
@@ -47,6 +48,15 @@ final class MainMenu {
         appMenu.identifier = NSUserInterfaceItemIdentifier("menu.app")
         appMenuItem.submenu = appMenu
 
+        let aboutItem = NSMenuItem(
+            title: l10n.text(.menuAppAbout),
+            action: #selector(AppDelegate.showAbout(_:)),
+            keyEquivalent: ""
+        )
+        aboutItem.target = nil
+        appMenu.addItem(aboutItem)
+        appMenu.addItem(.separator())
+
         let settingsItem = NSMenuItem(
             title: l10n.text(.menuAppSettings),
             action: #selector(AppDelegate.showSettings(_:)),
@@ -69,6 +79,18 @@ final class MainMenu {
         let fileMenu = NSMenu(title: l10n.text(.menuFile))
         fileMenu.identifier = NSUserInterfaceItemIdentifier("menu.file")
         fileMenuItem.submenu = fileMenu
+
+        // ⇧⌘N, as in Finder. Both FileListViewController and DirectoryTreeViewController implement newFolder(_:); the
+        // responder chain sends it to the focused pane, which decides the destination (FR-208, research.md R6).
+        let newFolderItem = NSMenuItem(
+            title: l10n.text(.menuFileNewFolder),
+            action: #selector(FileListViewController.newFolder(_:)),
+            keyEquivalent: "N"
+        )
+        newFolderItem.keyEquivalentModifierMask = [.command]
+        newFolderItem.target = nil
+        fileMenu.addItem(newFolderItem)
+        fileMenu.addItem(.separator())
 
         let openItem = NSMenuItem(
             title: l10n.text(.menuFileOpen),
@@ -122,6 +144,14 @@ final class MainMenu {
         searchItem.keyEquivalentModifierMask = [.command]
         searchItem.target = nil
         fileMenu.addItem(searchItem)
+        let shortcutsItem = NSMenuItem(
+            title: l10n.text(.menuFileShortcuts),
+            action: #selector(AppDelegate.showShortcuts(_:)),
+            keyEquivalent: "/"
+        )
+        shortcutsItem.keyEquivalentModifierMask = [.command]
+        shortcutsItem.target = zoomTarget
+        fileMenu.addItem(shortcutsItem)
         fileMenu.addItem(.separator())
 
         let fileTrashItem = NSMenuItem(
@@ -132,6 +162,14 @@ final class MainMenu {
         fileTrashItem.target = nil
         fileMenu.addItem(fileTrashItem)
         fileMenu.delegate = trashTitleReset
+        fileMenu.addItem(.separator())
+        let closeItem = NSMenuItem(
+            title: l10n.text(.menuFileClose),
+            action: #selector(NSWindow.performClose(_:)),
+            keyEquivalent: "w"
+        )
+        closeItem.target = nil
+        fileMenu.addItem(closeItem)
 
         let editMenuItem = NSMenuItem()
         mainMenu.addItem(editMenuItem)
@@ -319,11 +357,12 @@ final class MainMenu {
         navigateMenu.addItem(forwardItem)
 
         let bindings: [(NSMenuItem, TextKey)] = [
-            (settingsItem, .menuAppSettings), (quitItem, .menuAppQuit),
-            (fileMenuItem, .menuFile), (openItem, .menuFileOpen),
+            (aboutItem, .menuAppAbout), (settingsItem, .menuAppSettings), (quitItem, .menuAppQuit),
+            (fileMenuItem, .menuFile), (newFolderItem, .menuFileNewFolder), (openItem, .menuFileOpen),
             (openContainerItem, .menuFileShowContents), (goUpItem, .menuFileEnclosingFolder),
             (revealItem, .menuFileRevealInFinder), (addFavoriteItem, .menuFileAddToFavorites),
             (searchItem, .menuFileFind), (fileTrashItem, .menuFileTrash),
+            (shortcutsItem, .menuFileShortcuts), (closeItem, .menuFileClose),
             (editMenuItem, .menuEdit), (redoItem, .menuEditRedo),
             (movePasteItem, .menuEditMovePaste), (copyPathnameItem, .menuEditCopyPathname), (duplicateItem, .menuEditDuplicate),
             (renameItem, .menuEditRename), (editTrashItem, .menuFileTrash),
@@ -334,6 +373,21 @@ final class MainMenu {
             (navigateMenuItem, .menuGo), (backItem, .menuGoBack), (forwardItem, .menuGoForward),
         ]
         for (item, key) in bindings { bind(item, key) }
+
+        // Keys come from the shortcut assignments, not from the literals above (FR-261). Return (Rename) and the
+        // app and system keys (⌘Q, ⌘W, ⌘,, and the Edit menu basics) are not customizable (FR-256).
+        let shortcutBindings: [(NSMenuItem, ShortcutCommandID)] = [
+            (newFolderItem, .newFolder), (openItem, .open), (openContainerItem, .showContents),
+            (goUpItem, .enclosingFolder), (addFavoriteItem, .addToFavorites), (searchItem, .find),
+            (shortcutsItem, .shortcuts), (fileTrashItem, .trash), (editTrashItem, .trash),
+            (movePasteItem, .movePaste), (copyPathnameItem, .copyPathname), (duplicateItem, .duplicate),
+            (toolbarItem, .toolbar), (fullScreenItem, .fullScreen), (zoomInItem, .zoomIn), (zoomOutItem, .zoomOut),
+            (zoomToFitItem, .zoomToFit), (slideshowItem, .startSlideshow), (backItem, .back), (forwardItem, .forward),
+        ]
+        for (item, command) in shortcutBindings {
+            MenuShortcutApplier.shared.register(item, for: command)
+        }
+        MenuShortcutApplier.shared.register(zoomInAlternateItem, for: .zoomIn, isAlternate: true)
         let editBindings: [(Selector, TextKey)] = [
             (Selector(("undo:")), .menuEditUndo), (#selector(NSText.cut(_:)), .menuEditCut),
             (#selector(NSText.copy(_:)), .menuEditCopy), (#selector(NSText.paste(_:)), .menuEditPaste),

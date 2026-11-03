@@ -11,14 +11,16 @@ final class ConfirmationPresenter {
     }
 
     /// When `includesFolders` is true, notes that folders are processed with their contents (R32). When `location` is
-    /// present, includes the target's absolute path (R58). `ConfirmationPolicy` decides whether confirmation can be
+    /// present, includes the target's absolute path (R58). When `itemLocations` is not empty, shows each listed item's
+    /// absolute path below its name (FR-079, A-127). `ConfirmationPolicy` decides whether confirmation can be
     /// skipped. Confirmations that cannot be skipped (rename, move, and Trash from the tree) always appear regardless
     /// of the setting and do not show "Don't ask again" (FR-024, FR-079).
     func confirm(
         _ operation: FileOperation,
         includesFolders: Bool = false,
         origin: OperationOrigin = .fileList,
-        location: String? = nil
+        location: String? = nil,
+        itemLocations: [String] = []
     ) async -> Bool {
         let isSkippable = ConfirmationPolicy.isSkippable(operation.kind, origin: origin)
         if isSkippable, !settings.confirmation.confirmBeforeFileOperations {
@@ -27,7 +29,7 @@ final class ConfirmationPresenter {
         return await present(
             messageText: { self.messageText(for: operation.kind, count: operation.sources.count) },
             informativeText: {
-                var text = self.informativeText(for: operation, includesFolders: includesFolders)
+                var text = self.informativeText(for: operation, includesFolders: includesFolders, itemLocations: itemLocations)
                 if let location { text += "\n" + l10n.text(.dialogConfirmLocation, .text(location)) }
                 return text
             },
@@ -113,10 +115,19 @@ final class ConfirmationPresenter {
         }
     }
 
-    private func informativeText(for operation: FileOperation, includesFolders: Bool) -> String {
+    private func informativeText(
+        for operation: FileOperation,
+        includesFolders: Bool,
+        itemLocations: [String] = []
+    ) -> String {
         let sources = operation.sources
         var lines = [l10n.text(.dialogConfirmItems, .number(sources.count))]
-        lines.append(contentsOf: sources.prefix(5).map { l10n.text(.dialogConfirmBullet, .text($0.lastPathComponent)) })
+        for (index, source) in sources.prefix(5).enumerated() {
+            lines.append(l10n.text(.dialogConfirmBullet, .text(source.lastPathComponent)))
+            if index < itemLocations.count {
+                lines.append(l10n.text(.dialogConfirmLocation, .text(itemLocations[index])))
+            }
+        }
         if sources.count > 5 {
             lines.append(l10n.text(.dialogConfirmMore, .number(sources.count - 5)))
         }

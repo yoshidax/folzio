@@ -11,6 +11,7 @@ public enum OperationFailureReason: Error, Sendable, Equatable {
     case invalidName(NameValidationFailure)
     case sameNameExists
     case sameNameAtDestination
+    case replacementContainsSource
     case trashExistingFailed(systemReason: String)
     /// Reason the OS rejected the copy, move, or rename itself
     case systemFailure(systemReason: String)

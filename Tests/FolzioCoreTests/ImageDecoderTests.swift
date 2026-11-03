@@ -58,6 +58,41 @@ struct ImageDecoderTests {
         }
     }
 
+    @Test("A task cancelled before decoding does not decode and throws")
+    func cancelledTaskDoesNotDecode() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let url = root.appendingPathComponent("image.jpg")
+        try ImageFixtures.jpeg(at: url, width: 400, height: 300)
+        let data = try Data(contentsOf: url)
+        let decoder = ImageDecoder()
+
+        let task = Task { () -> (fileThrew: Bool, dataThrew: Bool) in
+            while !Task.isCancelled {
+                await Task.yield()
+            }
+            var fileThrew = false
+            var dataThrew = false
+            do {
+                _ = try await decoder.decode(url, maxPixelSize: 200)
+            } catch {
+                fileThrew = true
+            }
+            do {
+                _ = try await decoder.decode(data: data, maxPixelSize: 200)
+            } catch {
+                dataThrew = true
+            }
+            return (fileThrew, dataThrew)
+        }
+        task.cancel()
+        let result = await task.value
+
+        #expect(result.fileThrew)
+        #expect(result.dataThrew)
+    }
+
     @Test("decode(data:) returns the same pixelSize as decoding a file URL", arguments: ["jpg", "png"])
     func decodesDataLikeFile(fileExtension: String) async throws {
         let root = try makeTemporaryDirectory()

@@ -1,10 +1,26 @@
 import AppKit
 import FolzioCore
 import FolzioLocalization
+import Quartz
 
 @MainActor
 private final class FileListTableView: NSTableView {
-    var onSpace: (() -> Bool)?
+    var onSpace: ((NSEvent) -> Bool)?
+    /// Takes control of the Quick Look panel while this table has the focus (FR-247, research.md R2).
+    var quickLook: QuickLookCoordinator?
+
+    // The panel control methods are not main-actor isolated in the SDK, but AppKit calls them on the main thread.
+    nonisolated override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool {
+        MainActor.assumeIsolated { quickLook != nil }
+    }
+
+    nonisolated override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated { quickLook?.attach(to: panel) }
+    }
+
+    nonisolated override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated { quickLook?.detach(from: panel) }
+    }
     var onReturn: (() -> Bool)?
     var onEscape: (() -> Bool)?
 
@@ -28,7 +44,7 @@ private final class FileListTableView: NSTableView {
             return
         }
 
-        if event.charactersIgnoringModifiers == " ", onSpace?() == true {
+        if event.charactersIgnoringModifiers == " ", onSpace?(event) == true {
             return
         }
         super.keyDown(with: event)
@@ -41,6 +57,8 @@ private final class FileListIconCell: NSTableCellView {
     let nameField = NSTextField(labelWithString: "")
     var iconTask: Task<Void, Never>?
     var representedURL: URL?
+    /// Content version of the file whose thumbnail is shown or requested (FR-228).
+    var representedVersion: FileContentVersion?
     var iconPointSize: Double = 0
     var iconScale: Double = 0
 
@@ -83,10 +101,12 @@ private final class FileListIconCell: NSTableCellView {
             provider.cancel(
                 for: url,
                 pointSize: iconPointSize,
-                scale: iconScale
+                scale: iconScale,
+                version: representedVersion
             )
         }
         representedURL = nil
+        representedVersion = nil
     }
 }
 
@@ -97,8 +117,13 @@ final class ListModeView: NSView {
     private let scrollView = NSScrollView()
     private let tableView = FileListTableView()
 
-    var onTogglePlayback: (() -> Void)?
+    /// Coordinator of the Quick Look panel, set by the file list controller (FR-247).
+    var quickLook: QuickLookCoordinator? {
+        didSet { tableView.quickLook = quickLook }
+    }
     var onRename: ((URL, String) async -> Void)?
+    /// Commits the name of a folder created with New Folder, without the rename confirmation (FR-211).
+    var onRenameNewFolder: ((URL, String) async -> Void)?
     var onOpenItem: ((URL) -> Void)?
     var onInternalDrop: (([URL], URL, Bool) -> Void)?
     /// Esc. Returns true when handled (ends search results; FR-086).
@@ -117,17 +142,48 @@ final class ListModeView: NSView {
             (.name, l10n.text(.listColumnName)),
             (.creationDate, l10n.text(.listColumnCreationDate)),
             (.kind, l10n.text(.listColumnKind)),
+            (.size, l10n.text(.listColumnSize)),
+            (.modificationDate, l10n.text(.listColumnModificationDate)),
             (.location, l10n.text(.listColumnLocation)),
         ]
     }
 
+    /// Title of the column header menu item (and of the column) for a toggleable column.
+    private static func title(of column: ListColumn) -> String {
+        switch column {
+        case .creationDate: return l10n.text(.listColumnCreationDate)
+        case .kind: return l10n.text(.listColumnKind)
+        case .size: return l10n.text(.listColumnSize)
+        case .modificationDate: return l10n.text(.listColumnModificationDate)
+        }
+    }
+
+    private static let sizeFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        // Show "0 bytes" instead of "Zero KB" for empty files.
+        formatter.allowsNonnumericFormatting = false
+        return formatter
+    }()
+
+    /// Text of the Size column: `--` for folders and `..`, which have no size (TAK-47, FR-276).
+    private static func sizeText(of file: MediaFile) -> String {
+        file.hasFileSize ? sizeFormatter.string(fromByteCount: file.fileSize) : "--"
+    }
+
     private var lastURLs: [URL] = []
+    /// `BrowserModel.contentChangeGeneration` already applied to the rows (FR-228).
+    private var lastContentChangeGeneration = 0
     private var isApplyingSelection = false
     private var isSyncingSortDescriptors = false
     private var sortMenuInstalled = false
     private var sortMenuItems: [NSMenuItem] = []
+    /// Menu of the column header that shows or hides columns (TAK-47). Items are rebuilt each time it opens.
+    private let columnsMenu = NSMenu()
     private var renamingURL: URL?
     private var renamingOriginalName: String?
+    /// Whether the current rename names a folder just created with New Folder (FR-211, research.md R8).
+    private var renamingIsNewFolder = false
     private var isFinishingRename = false
 
     init(model: BrowserModel, provider: any ThumbnailProviding) {
@@ -144,7 +200,9 @@ final class ListModeView: NSView {
 
     @objc private func displayLanguageDidChange() {
         for (identifier, key) in [("name", TextKey.listColumnName), ("creationDate", .listColumnCreationDate),
-                                  ("kind", .listColumnKind), ("location", .listColumnLocation)] {
+                                  ("kind", .listColumnKind), ("size", .listColumnSize),
+                                  ("modificationDate", .listColumnModificationDate),
+                                  ("location", .listColumnLocation)] {
             tableView.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier(identifier))?.title = l10n.text(key)
         }
         updateSortMenuItems()
@@ -164,6 +222,7 @@ final class ListModeView: NSView {
                 }
             }
             for (identifier, text) in [("creationDate", l10n.dateTime(files[row].creationDate)),
+                                       ("modificationDate", l10n.dateTime(files[row].modificationDate)),
                                        ("kind", files[row].localizedKindName(using: l10n.kindNames).typeDescription)] {
                 let column = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier(identifier))
                 guard column >= 0,
@@ -202,15 +261,9 @@ final class ListModeView: NSView {
         InternalDrag.register(tableView)
         tableView.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
         tableView.setDraggingSourceOperationMask(.copy, forLocal: false)
-        tableView.onSpace = { [weak self] in
-            guard let self,
-                  let focused = self.model.selection.focused,
-                  let file = self.model.listing.files.first(where: { $0.url == focused }),
-                  file.kind.isVideo else {
-                return false
-            }
-            self.onTogglePlayback?()
-            return true
+        // Space toggles the Quick Look panel instead of video playback (FR-247, FR-248).
+        tableView.onSpace = { [weak self] event in
+            self?.quickLook?.handleSpace(event) ?? false
         }
         tableView.onReturn = { [weak self] in
             guard let self else { return false }
@@ -224,9 +277,18 @@ final class ListModeView: NSView {
         addColumn(identifier: "name", title: l10n.text(.listColumnName), width: 220)
         addColumn(identifier: "creationDate", title: l10n.text(.listColumnCreationDate), width: 150)
         addColumn(identifier: "kind", title: l10n.text(.listColumnKind), width: 150)
+        addColumn(identifier: "size", title: l10n.text(.listColumnSize), width: 90)
+        addColumn(identifier: "modificationDate", title: l10n.text(.listColumnModificationDate), width: 150)
         // Shown only while search results are displayed (FR-084, R37).
         addColumn(identifier: "location", title: l10n.text(.listColumnLocation), width: 180)
         tableView.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier("location"))?.isHidden = true
+        updateColumnVisibility()
+
+        // Right-clicking the column header opens the menu that shows or hides columns, as in Finder (TAK-47).
+        // The row context menu (`tableView.menu`) is not used for the header.
+        columnsMenu.delegate = self
+        columnsMenu.autoenablesItems = false
+        tableView.headerView?.menu = columnsMenu
 
         scrollView.documentView = tableView
         addSubview(scrollView)
@@ -248,6 +310,21 @@ final class ListModeView: NSView {
             tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
         }
         onOpenItem?(url)
+    }
+
+    /// On-screen frame of the icon of the row for `url`, where Quick Look zooms from and back to. `.zero` when the
+    /// row is not visible (FR-247, EC-173).
+    func quickLookSourceFrame(for url: URL) -> NSRect {
+        guard let window = tableView.window,
+              let row = model.listing.files.firstIndex(where: { $0.url == url }) else {
+            return .zero
+        }
+        let rowRect = tableView.rect(ofRow: row)
+        guard tableView.visibleRect.intersects(rowRect) else { return .zero }
+        let column = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
+        let cellRect = column >= 0 ? tableView.frameOfCell(atColumn: column, row: row) : rowRect
+        let iconRect = NSRect(x: cellRect.minX + 2, y: cellRect.midY - 8, width: 16, height: 16)
+        return window.convertToScreen(tableView.convert(iconRect, to: nil))
     }
 
     /// Scrolls the focused row into view (following after going back; FR-070).
@@ -288,7 +365,9 @@ final class ListModeView: NSView {
             _ = model.selection.selected
             _ = model.selection.focused
             _ = model.sortOrder
+            _ = model.visibleColumns
             _ = model.listing.search
+            _ = model.contentChangeGeneration
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.applyModel()
@@ -304,6 +383,7 @@ final class ListModeView: NSView {
 
     private func applyModel() {
         updateLocationColumn()
+        updateColumnVisibility()
         // For a hidden mode, defer row reloading and selection updates until it is shown (viewDidUnhide).
         // This avoids blocking the main thread for an invisible list when opening a zip with 10,000 rows (SC-015).
         guard !isHidden else {
@@ -320,7 +400,20 @@ final class ListModeView: NSView {
                 finishRenaming(commit: false)
             }
             lastURLs = urls
+            lastContentChangeGeneration = model.contentChangeGeneration
             tableView.reloadData()
+        } else if lastContentChangeGeneration != model.contentChangeGeneration {
+            // Several changes may have happened while hidden; then only the latest set is known, so reload all rows.
+            let missedChanges = model.contentChangeGeneration &- lastContentChangeGeneration != 1
+            lastContentChangeGeneration = model.contentChangeGeneration
+            if missedChanges {
+                if renamingURL != nil {
+                    finishRenaming(commit: false)
+                }
+                tableView.reloadData()
+            } else {
+                reloadReplacedRows(urls: urls)
+            }
         }
         if tableView.selectedRowIndexes != selected {
             tableView.selectRowIndexes(selected, byExtendingSelection: false)
@@ -336,12 +429,44 @@ final class ListModeView: NSView {
         refreshVisibleLocalizedCells()
     }
 
+    /// Reloads only the rows whose content was replaced at the same URL, keeping the selection and scroll position
+    /// (FR-228, FR-229). Skips the row being renamed so the edit is not discarded.
+    private func reloadReplacedRows(urls: [URL]) {
+        let changed = model.changedContentURLs
+        guard !changed.isEmpty else { return }
+        var rows = IndexSet()
+        for (row, url) in urls.enumerated() where changed.contains(url) && url != renamingURL {
+            rows.insert(row)
+        }
+        guard !rows.isEmpty else { return }
+        tableView.reloadData(forRowIndexes: rows, columnIndexes: IndexSet(integersIn: 0..<tableView.numberOfColumns))
+    }
+
     /// Shows the Location column only while search results are displayed.
     private func updateLocationColumn() {
         let hidden = !model.isShowingSearchResults
         guard let column = tableView.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier("location")),
               column.isHidden != hidden else { return }
         column.isHidden = hidden
+    }
+
+    /// Shows the columns the user chose besides the name column, which is always shown (TAK-47, FR-274).
+    private func updateColumnVisibility() {
+        for column in ListColumn.allCases {
+            guard let tableColumn = tableView.tableColumn(
+                withIdentifier: NSUserInterfaceItemIdentifier(column.rawValue)
+            ) else { continue }
+            let hidden = !model.visibleColumns.contains(column)
+            if tableColumn.isHidden != hidden {
+                tableColumn.isHidden = hidden
+            }
+        }
+    }
+
+    @objc private func toggleColumn(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let column = ListColumn(rawValue: rawValue) else { return }
+        model.setColumn(column, visible: !model.visibleColumns.contains(column))
     }
 
     private func syncSortDescriptors() {
@@ -424,8 +549,21 @@ final class ListModeView: NSView {
         updateSortMenuItems()
     }
 
+    /// Whether the rows on screen already include `url`. A listing change reloads the table and cancels any rename, so
+    /// naming a new folder waits until its row has been applied (FR-210).
+    func hasAppliedRow(for url: URL) -> Bool {
+        !isHidden && lastURLs.contains(url)
+    }
+
+    /// Whether the last context click hit no row, so the file list shows the background menu (FR-213, R7).
+    var isContextClickOnBackground: Bool {
+        tableView.clickedRow < 0
+    }
+
+    /// Starts renaming the single selected row. Pass `isNewFolder: true` only right after New Folder, so the commit
+    /// skips the rename confirmation (FR-211).
     @discardableResult
-    func beginRenaming() -> Bool {
+    func beginRenaming(isNewFolder: Bool = false) -> Bool {
         guard renamingURL == nil else { return false }
 
         let selected = model.selection.selected
@@ -450,6 +588,7 @@ final class ListModeView: NSView {
 
         renamingURL = focused
         renamingOriginalName = field.stringValue
+        renamingIsNewFolder = isNewFolder
         field.stringValue = focused.lastPathComponent
         setEditingAppearance(field, editing: true)
 
@@ -476,6 +615,8 @@ final class ListModeView: NSView {
 
         renamingURL = nil
         renamingOriginalName = nil
+        let isNewFolder = renamingIsNewFolder
+        renamingIsNewFolder = false
 
         var newName = oldName
         if let row = model.listing.files.firstIndex(where: { $0.url == url }),
@@ -497,7 +638,7 @@ final class ListModeView: NSView {
         }
 
         guard commit, !newName.isEmpty, newName != oldName else { return }
-        let handler = onRename
+        let handler = isNewFolder ? onRenameNewFolder : onRename
         Task { @MainActor in
             await handler?(url, newName)
         }
@@ -511,6 +652,22 @@ final class ListModeView: NSView {
         field.drawsBackground = editing
         field.backgroundColor = editing ? .textBackgroundColor : .clear
         field.focusRingType = editing ? .default : .none
+    }
+}
+
+extension ListModeView: NSMenuDelegate {
+    /// Builds the column header menu: one checkable item per toggleable column. The name column has no item because it
+    /// is always shown (TAK-47, FR-273).
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === columnsMenu else { return }
+        menu.removeAllItems()
+        for column in ListColumn.allCases {
+            let item = NSMenuItem(title: Self.title(of: column), action: #selector(toggleColumn(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = column.rawValue
+            item.state = model.visibleColumns.contains(column) ? .on : .off
+            menu.addItem(item)
+        }
     }
 }
 
@@ -605,6 +762,10 @@ extension ListModeView: NSTableViewDelegate {
         switch tableColumn.identifier.rawValue {
         case "creationDate":
             cell.textField?.stringValue = l10n.dateTime(file.creationDate)
+        case "modificationDate":
+            cell.textField?.stringValue = l10n.dateTime(file.modificationDate)
+        case "size":
+            cell.textField?.stringValue = Self.sizeText(of: file)
         case "kind":
             cell.textField?.stringValue = file.localizedKindName(using: l10n.kindNames).typeDescription
         case "location":
@@ -636,8 +797,9 @@ extension ListModeView: NSTableViewDelegate {
             cell.iconPointSize = 0
             cell.iconScale = 0
             cell.representedURL = file.url
+            cell.representedVersion = nil
             cell.iconView.image = IconCatalog.listItemIcon(for: file.kind, pointSize: 16)
-            cell.iconView.contentTintColor = .secondaryLabelColor
+            cell.iconView.contentTintColor = IconCatalog.tintColor(for: file.kind)
             if renamingURL != file.url {
                 setEditingAppearance(cell.nameField, editing: false)
             }
@@ -653,9 +815,10 @@ extension ListModeView: NSTableViewDelegate {
         cell.iconView.contentTintColor = nil
         cell.nameField.setAccessibilityLabel(nil)
 
-        if cell.representedURL != file.url {
+        if cell.representedURL != file.url || cell.representedVersion != file.contentVersion {
             cell.cancelIconRequest(using: provider)
             cell.representedURL = file.url
+            cell.representedVersion = file.contentVersion
             cell.iconView.image = file.kind.mediaKind.flatMap { IconCatalog.fallbackIcon(for: $0) }
 
             let scale = Double(
@@ -669,15 +832,18 @@ extension ListModeView: NSTableViewDelegate {
 
             let provider = self.provider
             let url = file.url
+            let version = file.contentVersion
             cell.iconTask = Task { [weak cell] in
                 let image = await provider.thumbnail(
                     for: url,
                     pointSize: pointSize,
-                    scale: scale
+                    scale: scale,
+                    version: version
                 )
                 guard !Task.isCancelled,
                       let cell,
                       cell.representedURL == url,
+                      cell.representedVersion == version,
                       let image else {
                     return
                 }

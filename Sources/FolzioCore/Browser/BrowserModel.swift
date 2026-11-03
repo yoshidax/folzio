@@ -60,6 +60,11 @@ public final class BrowserModel {
     public private(set) var selection: SelectionState
     public private(set) var preview: PreviewContent
     public private(set) var stopPlaybackSignal = 0
+    /// Incremented each time rows keep their URL but their content is found to be replaced (FR-228, research.md R4).
+    /// The file list reloads only the rows in `changedContentURLs` when the URL order is unchanged.
+    public private(set) var contentChangeGeneration = 0
+    /// URLs whose content version changed at the latest `contentChangeGeneration`.
+    public private(set) var changedContentURLs: Set<URL> = []
     public private(set) var mediaTypeFilter = MediaTypeFilter()
     /// Whether zip file rows appear in the list (FR-095). The source of truth for persistence is
     /// `SettingsStore`'s `view.showsZipFiles`.
@@ -126,6 +131,9 @@ public final class BrowserModel {
         }
     }
 
+    /// Columns of the list view shown besides the name column. Changes are persisted (TAK-47).
+    public private(set) var visibleColumns: Set<ListColumn>
+
     private let lister: any DirectoryListing
     private let decoder: any ImageDecoding
     private let cache: DecodedImageCache
@@ -135,6 +143,9 @@ public final class BrowserModel {
 
     /// Tree roots (home and volumes). Determine the `..` and ⌘↑ enclosing folder for regular folders (R30).
     private var navigationRoots: [URL] = []
+    /// Every root passed to `setNavigationRoots`, including volumes that were removed later. Keeps the root of a
+    /// removed volume known so that its vanished folders are not replaced by a folder outside it (EC-18).
+    private var knownRoots: Set<URL> = []
     private var treeSyncCounter = 0
     /// ID of the tree synchronization request for a folder opened from search results. When synchronization
     /// completes, stores the location that could be selected as the last selected folder (EC-102, R10). Cleared on
@@ -145,6 +156,8 @@ public final class BrowserModel {
     private var archiveIndex: ArchiveIndex?
     /// Incremented on every folder or zip navigation and used to discard results from older asynchronous work.
     private var navigationGeneration = 0
+    /// Identifies the most recently requested regular folder enumeration.
+    private var folderListingGeneration = 0
     /// Sorted rows before applying the media type filter. Excludes `..`, which `rebuildListing()` adds once.
     private var allFiles: [MediaFile] = [] {
         didSet { kindFilesRevision &+= 1 }
@@ -155,7 +168,17 @@ public final class BrowserModel {
     private var listingTask: Task<Void, Never>?
     private var previewTask: Task<Void, Never>?
     private var previewGeneration = 0
-    private var prefetchTasks: [URL: Task<Void, Never>] = [:]
+    private var prefetchTasks: [URL: PrefetchEntry] = [:]
+    /// Shares the load slots between the preview and the prefetch (FR-282, FR-284).
+    private let loadScheduler: ImageLoadScheduler
+
+    /// One prefetch of a neighbor image. `isRunning` is set once the prefetch holds a load slot, which tells the
+    /// preview whether it can wait for the result instead of starting the same load again (FR-285).
+    @MainActor
+    private final class PrefetchEntry {
+        var task: Task<Void, Never>?
+        var isRunning = false
+    }
     private var isRevertingSortOrder = false
 
     /// Running search enumerations (the original and any added for renames). Cancelled by a new search or folder
@@ -163,6 +186,9 @@ public final class BrowserModel {
     private var searchTasks: [Task<Void, Never>] = []
     /// Criteria of the current search. Used to enumerate the new location after a rename (R63).
     private var searchPattern: SearchPattern?
+    /// Whether the current search matches zip files. Fixed from `showsZipFiles` when the search starts, so toggling
+    /// the setting later does not change the running search or its results (FR-278).
+    private var searchIncludesArchives = false
     /// Folder renames during the current search. Rebases URLs of results that arrive later (R63).
     private var searchLedger = SearchRenameLedger()
     private var movedSearchPaths: Set<String> = []
@@ -197,8 +223,10 @@ public final class BrowserModel {
         cache: DecodedImageCache,
         settings: SettingsStore,
         archiveReader: (any ArchiveReading)? = nil,
-        searcher: (any FileNameSearching)? = nil
+        searcher: (any FileNameSearching)? = nil,
+        loadScheduler: ImageLoadScheduler = ImageLoadScheduler()
     ) {
+        self.loadScheduler = loadScheduler
         self.lister = lister
         self.kindNames = kindNames
         self.decoder = decoder
@@ -208,6 +236,7 @@ public final class BrowserModel {
         self.searcher = searcher ?? FileNameSearcher(kindNames: kindNames)
         self.sortOrder = settings.viewSettings.sortOrder
         self.showsZipFiles = settings.viewSettings.showsZipFiles
+        self.visibleColumns = settings.viewSettings.visibleColumns
         self.screenMaxPixel = 4096
 
         let folder = settings.viewSettings.lastFolder
@@ -281,9 +310,10 @@ public final class BrowserModel {
         notifyLocationChange(reason, leavingFocus: leavingFocus)
 
         let generation = navigationGeneration
+        let request = nextFolderListingGeneration()
         let task = Task { [weak self] in
             guard let self else { return }
-            await self.loadFolder(url, generation: generation)
+            await self.loadFolder(url, generation: generation, request: request)
         }
         listingTask = task
         await task.value
@@ -314,6 +344,7 @@ public final class BrowserModel {
         )
 
         searchPattern = pattern
+        searchIncludesArchives = showsZipFiles
         startSearchStream(in: root, matching: pattern)
     }
 
@@ -324,7 +355,13 @@ public final class BrowserModel {
         let visits = SearchVisitLog()
         let streamIndex = searchLedger.addStream(visits: visits)
         let stream = searcher.search(
-            SearchRequest(root: root, pattern: pattern, matchesRoot: matchesRoot, visits: visits)
+            SearchRequest(
+                root: root,
+                pattern: pattern,
+                matchesRoot: matchesRoot,
+                visits: visits,
+                includesArchives: searchIncludesArchives
+            )
         )
         activeSearchStreams += 1
         let task = Task { [weak self] in
@@ -347,16 +384,26 @@ public final class BrowserModel {
     public func didRenameItem(at oldURL: URL, to newURL: URL) {
         guard isShowingSearchResults,
               let index = allFiles.firstIndex(where: { $0.url == oldURL }) else { return }
-        guard let kind = MediaKind(fileExtension: newURL.pathExtension) else {
+        let old = allFiles[index]
+        let newKind: ListItemKind
+        if old.kind == .archive {
+            // A zip file stays in the results only while its new name still has the `.zip` extension (FR-281).
+            guard DirectoryLister.isArchive(newURL) else {
+                removeSearchResults([oldURL])
+                return
+            }
+            newKind = .archive
+        } else if let kind = MediaKind(fileExtension: newURL.pathExtension) {
+            newKind = .media(kind)
+        } else {
             removeSearchResults([oldURL])
             return
         }
 
-        let old = allFiles[index]
         var renamed = old
         renamed.url = newURL
         renamed.name = newURL.lastPathComponent
-        renamed.kind = .media(kind)
+        renamed.kind = newKind
         renamed.typeDescription = (try? newURL.resourceValues(forKeys: [.localizedTypeDescriptionKey]))?
             .localizedTypeDescription ?? old.typeDescription
         allFiles[index] = renamed
@@ -494,8 +541,9 @@ public final class BrowserModel {
                 listingTask?.cancel()
                 let generation = navigationGeneration
                 let folder = listing.folder
+                let request = nextFolderListingGeneration()
                 listingTask = Task { [weak self] in
-                    await self?.loadFolder(folder, generation: generation)
+                    await self?.loadFolder(folder, generation: generation, request: request)
                 }
             }
         }
@@ -530,6 +578,7 @@ public final class BrowserModel {
     /// Receives the tree roots. When they change, rebuilds `..` for loaded regular folder listings (does not read the
     /// disk).
     public func setNavigationRoots(_ urls: [URL]) {
+        knownRoots.formUnion(urls.map(\.standardizedFileURL))
         guard urls != navigationRoots else { return }
         navigationRoots = urls
         guard listing.archive == nil else { return }
@@ -558,7 +607,9 @@ public final class BrowserModel {
         switch file.kind {
         case .archive:
             guard listing.archive == nil else { return }
-            await openArchive(file.url)
+            // From search results, the zip's folder (not the pre-search folder) becomes the current folder and the
+            // history records the zip root as a new location (FR-280).
+            await openArchive(file.url, fromSearchResults: isShowingSearchResults)
         case .directory:
             guard let location = listing.archive,
                   let index = archiveIndex,
@@ -612,7 +663,6 @@ public final class BrowserModel {
               treeSyncRequest == request,
               listing.folder.standardizedFileURL == request.folder.standardizedFileURL,
               !isShowingSearchResults,
-              listing.archive == nil,
               !showsNotFound else { return }
         let selectedComponents = selectedFolder.standardizedFileURL.pathComponents
         let targetComponents = request.folder.standardizedFileURL.pathComponents
@@ -699,6 +749,26 @@ public final class BrowserModel {
         }
     }
 
+    /// Shows or hides a list column and persists the choice. Hiding the column the list is sorted by switches to sorting
+    /// by name, in the direction the user last sorted by name in (ascending if never), as Finder does (FR-277).
+    public func setColumn(_ column: ListColumn, visible: Bool) {
+        var columns = visibleColumns
+        if visible {
+            columns.insert(column)
+        } else {
+            columns.remove(column)
+        }
+        guard columns != visibleColumns else { return }
+        visibleColumns = columns
+        var viewSettings = settings.viewSettings
+        viewSettings.visibleColumns = columns
+        settings.viewSettings = viewSettings
+
+        if !visible, sortOrder.column.listColumn == column {
+            sortOrder = SortOrder(column: .name, ascending: viewSettings.nameSortAscending)
+        }
+    }
+
     /// Toggles and persists zip file visibility (FR-095–098). Does nothing for the same value.
     /// While a zip is displayed, only persists the setting and does not change the listing, selection, or preview
     /// (FR-098). Otherwise rebuilds the listing (without reading the disk) and restricts the selection to visible
@@ -740,14 +810,18 @@ public final class BrowserModel {
         guard listing.archive == nil else { return }
         let folder = listing.folder
         let generation = navigationGeneration
+        let request = nextFolderListingGeneration()
         do {
             let files = try await lister.mediaFiles(in: folder)
             guard generation == navigationGeneration,
+                  request == folderListingGeneration,
                   listing.folder == folder,
                   listing.archive == nil else { return }
 
             showsNotFound = false
-            allFiles = sorted(files.map { $0.localizedKindName(using: kindNames) }, by: sortOrder)
+            let newFiles = sorted(files.map { $0.localizedKindName(using: kindNames) }, by: sortOrder)
+            let changed = Self.replacedContentURLs(old: allFiles, new: newFiles)
+            allFiles = newFiles
             rebuildListing()
 
             let available = Set(listing.files.map(\.url))
@@ -760,8 +834,10 @@ public final class BrowserModel {
                 previewGeneration += 1
                 preview = .empty
             }
+            noteReplacedContent(changed)
         } catch {
             guard generation == navigationGeneration,
+                  request == folderListingGeneration,
                   listing.folder == folder,
                   listing.archive == nil else { return }
             allFiles = []
@@ -793,21 +869,40 @@ public final class BrowserModel {
             await pruneMissingResults(under: folders)
             return
         }
-        let current = listing.folder.standardizedFileURL
-        guard folders.contains(where: { $0.standardizedFileURL == current }) else {
+        let folder = listing.folder
+        let current = folder.standardizedFileURL
+        let notifiesCurrent = folders.contains { $0.standardizedFileURL == current }
+        // A renamed, moved, or deleted displayed folder or ancestor is reported only as a change to its parent, so
+        // also check that the displayed folder still exists when an ancestor is reported (FR-042, EC-13).
+        guard notifiesCurrent || FolderNavigation.containsFolderOrAncestor(of: folder, in: folders) else {
             return
         }
+        // Keep the not-found display (FR-067, EC-65) when only an ancestor is reported.
+        guard notifiesCurrent || !showsNotFound else { return }
 
-        var isDirectory: ObjCBool = false
-        let exists = FileManager.default.fileExists(
-            atPath: listing.folder.path,
-            isDirectory: &isDirectory
-        )
-        guard exists, isDirectory.boolValue else {
-            let vanished = listing.folder
-            await selectFolder(vanished.deletingLastPathComponent(), reason: .relocated(vanished: [vanished]))
+        let generation = navigationGeneration
+        let relocation = await Task.detached(priority: .userInitiated) { () -> (folder: URL, vanished: URL)? in
+            guard !BrowserModel.isExistingFolder(folder) else { return nil }
+            return FolderNavigation.nearestExistingAncestor(of: folder, isFolder: BrowserModel.isExistingFolder)
+                ?? (folder.deletingLastPathComponent(), folder)
+        }.value
+        guard generation == navigationGeneration, listing.folder == folder, !isShowingSearchResults else { return }
+
+        if let relocation {
+            // A folder outside the vanished folder's root means that its volume was removed. Show the folder as not
+            // found instead of moving out of the volume, for example to `/Volumes` (EC-18, EC-65).
+            guard FolderNavigation.staysInsideRoot(from: folder, to: relocation.folder, roots: knownRoots) else {
+                if !showsNotFound {
+                    await showMissingFolder()
+                }
+                return
+            }
+            // Move to the nearest folder that still exists, not to a parent that vanished with it (FR-042, EC-13).
+            await selectFolder(relocation.folder, reason: .relocated(vanished: [relocation.vanished]))
             return
         }
+        // The displayed folder still exists. A change in an ancestor alone does not change its contents.
+        guard notifiesCurrent else { return }
 
         if let location = listing.archive {
             // While opening, there is no index to compare, so wait without comparing.
@@ -822,6 +917,42 @@ public final class BrowserModel {
         }
 
         await reloadCurrentFolder()
+    }
+
+    /// Receives a mount or unmount of a volume after the tree updated its roots. While showing search results,
+    /// removes results that no longer exist (Edge Cases, R38). Otherwise, when the displayed folder (the folder
+    /// containing the zip when inside a zip) no longer exists, shows it as not found and clears the selection and the
+    /// preview (EC-18, EC-65). Does nothing when the folder still exists or is already shown as not found.
+    public func handleVolumesChanged() async {
+        if isShowingSearchResults {
+            await reloadCurrentFolder()
+            return
+        }
+        guard !showsNotFound else { return }
+        let folder = listing.folder
+        let generation = navigationGeneration
+        let exists = await Task.detached(priority: .userInitiated) {
+            BrowserModel.isExistingFolder(folder)
+        }.value
+        guard !exists, generation == navigationGeneration, listing.folder == folder, !isShowingSearchResults,
+              !showsNotFound else { return }
+        await showMissingFolder()
+    }
+
+    /// Shows the displayed folder as not found. Inside a zip, closes the zip first. Loading the folder fails with
+    /// `.notFound`, which removes the current history entry (EC-65).
+    private func showMissingFolder() async {
+        if listing.archive != nil {
+            await returnToFolder(selecting: nil, reason: .relocated(vanished: [listing.folder]))
+        } else {
+            await reloadCurrentFolder()
+        }
+    }
+
+    /// Whether a directory exists at `url`. Reads the disk, so call this off the main thread.
+    nonisolated private static func isExistingFolder(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     public func moveFocus(_ direction: FocusDirection) {
@@ -854,8 +985,12 @@ public final class BrowserModel {
     /// search results, and uses `.loading` while searching before any results arrive.
     private func rebuildListing() {
         // Apply the zip visibility once after the media type filter. Does not change `allFiles` (FR-095, R46).
-        let filtered = ZipFileVisibility(showsZipFiles: showsZipFiles)
-            .apply(to: mediaTypeFilter.apply(to: allFiles))
+        // Search results are exempt: whether they contain zip files was decided when the search started, and
+        // toggling the setting afterwards does not change existing results (FR-278).
+        let mediaFiltered = mediaTypeFilter.apply(to: allFiles)
+        let filtered = isShowingSearchResults
+            ? mediaFiltered
+            : ZipFileVisibility(showsZipFiles: showsZipFiles).apply(to: mediaFiltered)
         if let location = listing.archive {
             listing.files = [Self.parentRow(for: location)] + filtered
         } else {
@@ -950,6 +1085,7 @@ public final class BrowserModel {
         }
         searchTasks.removeAll()
         searchPattern = nil
+        searchIncludesArchives = false
         searchLedger = SearchRenameLedger()
         movedSearchPaths.removeAll()
         pendingSearchTreeSyncID = nil
@@ -958,8 +1094,8 @@ public final class BrowserModel {
         previewGeneration += 1
         previewTask?.cancel()
         previewTask = nil
-        for task in prefetchTasks.values {
-            task.cancel()
+        for entry in prefetchTasks.values {
+            entry.task?.cancel()
         }
         prefetchTasks.removeAll()
 
@@ -973,19 +1109,38 @@ public final class BrowserModel {
     }
 
     /// Opens a zip and builds the root listing. Uses `.loading` while opening.
-    private func openArchive(_ url: URL) async {
+    ///
+    /// When opened from search results, the folder containing the zip becomes `listing.folder`; the tree is asked to
+    /// select it (EC-102 applies when it is not in the tree) and the saved last folder is updated, as for a folder
+    /// row opened from search results (FR-140, 271).
+    private func openArchive(_ url: URL, fromSearchResults: Bool = false) async {
         let leavingFocus = selection.focused
+        let containingFolder = fromSearchResults
+            ? URL(fileURLWithPath: url.deletingLastPathComponent().path, isDirectory: true)
+            : listing.folder
+        if fromSearchResults {
+            treeSyncCounter += 1
+            treeSyncRequest = TreeSyncRequest(folder: containingFolder, id: treeSyncCounter)
+        }
         resetForNavigation()
         leaveSearchIfNeeded()
+        if fromSearchResults {
+            pendingSearchTreeSyncID = treeSyncRequest?.id
+            var viewSettings = settings.viewSettings
+            if viewSettings.lastFolder?.standardizedFileURL != containingFolder.standardizedFileURL {
+                viewSettings.lastFolder = containingFolder
+                settings.viewSettings = viewSettings
+            }
+        }
         archiveIndex = nil
         archiveRenames.removeAll()
         listing = FolderListing(
-            folder: listing.folder,
+            folder: containingFolder,
             files: [],
             state: .loading,
             archive: ArchiveLocation(archive: url, directory: "")
         )
-        onLocationEvent?(.navigated(leavingFocus: leavingFocus))
+        notifyLocationChange(fromSearchResults ? .openedSearchResultFolder : .navigated, leavingFocus: leavingFocus)
 
         let generation = navigationGeneration
         let task = Task { [weak self] in
@@ -1051,30 +1206,38 @@ public final class BrowserModel {
         notifyLocationChange(reason, leavingFocus: leavingFocus)
 
         let generation = navigationGeneration
+        let request = nextFolderListingGeneration()
         let task = Task { [weak self] in
             guard let self else { return }
-            await self.loadFolder(folder, generation: generation)
+            await self.loadFolder(folder, generation: generation, request: request)
         }
         listingTask = task
         await task.value
 
-        guard generation == navigationGeneration, let target else { return }
+        guard generation == navigationGeneration, request == folderListingGeneration, let target else { return }
         let standardized = target.standardizedFileURL
         if let row = listing.files.first(where: { $0.url.standardizedFileURL == standardized }) {
             select([row.url], focused: row.url)
         }
     }
 
-    private func loadFolder(_ url: URL, generation: Int, notifyNotFound: Bool = true) async {
+    private func nextFolderListingGeneration() -> Int {
+        folderListingGeneration &+= 1
+        return folderListingGeneration
+    }
+
+    private func loadFolder(_ url: URL, generation: Int, request: Int, notifyNotFound: Bool = true) async {
         do {
             let files = try await lister.mediaFiles(in: url)
-            guard !Task.isCancelled, generation == navigationGeneration, listing.folder == url else { return }
+            guard !Task.isCancelled, generation == navigationGeneration,
+                  request == folderListingGeneration, listing.folder == url else { return }
 
             showsNotFound = false
             allFiles = sorted(files.map { $0.localizedKindName(using: kindNames) }, by: sortOrder)
             rebuildListing()
         } catch {
-            guard !Task.isCancelled, generation == navigationGeneration, listing.folder == url else { return }
+            guard !Task.isCancelled, generation == navigationGeneration,
+                  request == folderListingGeneration, listing.folder == url else { return }
 
             allFiles = []
             listing.files = unreadableFolderRows()
@@ -1204,10 +1367,12 @@ public final class BrowserModel {
         showsNotFound = false
         listing = FolderListing(folder: location.folder, files: [], state: .loading)
         let generation = navigationGeneration
+        let request = nextFolderListingGeneration()
         listingTask = Task { [weak self] in
             guard let self else { return }
-            await self.loadFolder(location.folder, generation: generation, notifyNotFound: false)
+            await self.loadFolder(location.folder, generation: generation, request: request, notifyNotFound: false)
             guard generation == self.navigationGeneration,
+                  request == self.folderListingGeneration,
                   self.listing.folder == location.folder,
                   self.listing.archive == nil else { return }
             self.selectHistoryFocus(focusing)
@@ -1323,11 +1488,42 @@ public final class BrowserModel {
         guard !targets.isEmpty else { return }
 
         let generation = navigationGeneration
-        let missing = await Task.detached(priority: .userInitiated) {
-            Set(targets.filter { !FileManager.default.fileExists(atPath: $0.path) })
+        // Reads the content version together with the existence check, so results replaced at the same path are
+        // refreshed like rows of a folder listing (FR-232, research.md R6).
+        let (missing, versions) = await Task.detached(priority: .userInitiated) {
+            var missing = Set<URL>()
+            var versions: [URL: FileContentVersion] = [:]
+            for url in targets {
+                if FileManager.default.fileExists(atPath: url.path) {
+                    versions[url] = FileContentVersion.current(of: url)
+                } else {
+                    missing.insert(url)
+                }
+            }
+            return (missing, versions)
         }.value
-        guard generation == navigationGeneration, !missing.isEmpty else { return }
-        removeSearchResults(missing)
+        guard generation == navigationGeneration else { return }
+
+        var changed = Set<URL>()
+        var updatedFiles = allFiles
+        for index in updatedFiles.indices {
+            let file = updatedFiles[index]
+            guard file.kind.isMedia,
+                  let version = versions[file.url],
+                  version != file.contentVersion else { continue }
+            updatedFiles[index].contentVersion = version
+            changed.insert(file.url)
+        }
+        if !changed.isEmpty {
+            allFiles = updatedFiles
+        }
+
+        if !missing.isEmpty {
+            removeSearchResults(missing)
+        } else if !changed.isEmpty {
+            rebuildListing()
+        }
+        noteReplacedContent(changed)
     }
 
     /// Removes results from the source of a move and delayed results from an old location that is still being
@@ -1385,12 +1581,14 @@ public final class BrowserModel {
 
         // Check the listing row kind first. Do not preview non-media rows (zip files, directories, and `..`) (FR-075).
         let kind: MediaKind
+        var version: FileContentVersion?
         if let file = listing.files.first(where: { $0.url == url }) {
             guard case let .media(mediaKind) = file.kind else {
                 preview = .empty
                 return
             }
             kind = mediaKind
+            version = file.contentVersion
         } else if let mediaKind = MediaKind(fileExtension: url.pathExtension) {
             kind = mediaKind
         } else {
@@ -1403,8 +1601,18 @@ public final class BrowserModel {
             return
         }
 
+        // The focused image is no longer a neighbor to prefetch. Take over its prefetch instead of loading it twice
+        // (FR-283, FR-285).
+        let inheritedPrefetch = claimPrefetch(for: url)
+
         if let parsed = ArchiveURL.parse(url) {
-            loadArchivePreview(for: url, path: parsed.path, generation: generation)
+            loadArchivePreview(
+                for: url,
+                path: parsed.path,
+                version: version,
+                generation: generation,
+                inheriting: inheritedPrefetch
+            )
             return
         }
 
@@ -1414,9 +1622,33 @@ public final class BrowserModel {
         }
 
         preview = .loading(url)
+        startImagePreview(for: url, version: version, generation: generation, inheriting: inheritedPrefetch)
+    }
+
+    /// Removes the prefetch of `url` and returns it when it already holds a load slot, so that the preview can wait
+    /// for its result. A prefetch that still waits for a slot is cancelled and the preview loads the image itself.
+    private func claimPrefetch(for url: URL) -> Task<Void, Never>? {
+        guard let entry = prefetchTasks.removeValue(forKey: url) else { return nil }
+        if entry.isRunning {
+            return entry.task
+        }
+        entry.task?.cancel()
+        return nil
+    }
+
+    /// Decodes a still image for the preview and shows the result unless a newer preview request started.
+    private func startImagePreview(
+        for url: URL,
+        version: FileContentVersion?,
+        generation: Int,
+        inheriting inheritedPrefetch: Task<Void, Never>? = nil
+    ) {
         previewTask = Task { [weak self] in
             guard let self else { return }
-            let result = await self.decodedImage(for: url)
+            // The result of the inherited prefetch is in the cache when it succeeds (FR-285).
+            await inheritedPrefetch?.value
+            guard !Task.isCancelled, self.previewGeneration == generation else { return }
+            let result = await self.decodedImage(for: url, version: version)
             guard !Task.isCancelled, self.previewGeneration == generation else { return }
 
             switch result {
@@ -1431,7 +1663,13 @@ public final class BrowserModel {
         }
     }
 
-    private func loadArchivePreview(for url: URL, path: String, generation: Int) {
+    private func loadArchivePreview(
+        for url: URL,
+        path: String,
+        version: FileContentVersion?,
+        generation: Int,
+        inheriting inheritedPrefetch: Task<Void, Never>? = nil
+    ) {
         if let entry = archiveIndex?.entry(at: path) {
             switch entry.readability {
             case .readable:
@@ -1452,7 +1690,9 @@ public final class BrowserModel {
         let maxPixelSize = max(1, screenMaxPixel)
         previewTask = Task { [weak self] in
             guard let self else { return }
-            let result = await self.archiveImage(for: url, maxPixelSize: maxPixelSize)
+            await inheritedPrefetch?.value
+            guard !Task.isCancelled, self.previewGeneration == generation else { return }
+            let result = await self.archiveImage(for: url, version: version, maxPixelSize: maxPixelSize)
             guard !Task.isCancelled, self.previewGeneration == generation else { return }
 
             switch result {
@@ -1467,8 +1707,34 @@ public final class BrowserModel {
     }
 
     /// Obtains an image inside a zip in this order: cache, read `Data`, decode. Returns animated images as `Data`.
-    private func archiveImage(for url: URL, maxPixelSize: Int) async -> ArchiveImageResult {
-        if let cached = await cache.get(url) {
+    /// The read and the decode run while holding a load slot (FR-282). A request cancelled while waiting for the
+    /// slot returns a failure that the caller discards because its task is cancelled.
+    private func archiveImage(
+        for url: URL,
+        version: FileContentVersion?,
+        maxPixelSize: Int,
+        priority: ImageLoadPriority = .preview,
+        entry: PrefetchEntry? = nil
+    ) async -> ArchiveImageResult {
+        if let cached = await cache.get(url, version: version) {
+            return .image(cached)
+        }
+
+        guard await loadScheduler.acquire(priority) else { return .failure(.unreadable) }
+        entry?.isRunning = true
+        let result = await readAndDecodeArchiveImage(for: url, version: version, maxPixelSize: maxPixelSize)
+        await loadScheduler.release(priority)
+        return result
+    }
+
+    /// Reads and decodes a zip entry. The caller holds a load slot.
+    private func readAndDecodeArchiveImage(
+        for url: URL,
+        version: FileContentVersion?,
+        maxPixelSize: Int
+    ) async -> ArchiveImageResult {
+        // Another load may have stored the image while this request waited for the slot.
+        if let cached = await cache.get(url, version: version) {
             return .image(cached)
         }
 
@@ -1486,59 +1752,175 @@ public final class BrowserModel {
 
         do {
             let image = try await decoder.decode(data: data, maxPixelSize: maxPixelSize)
-            await cache.put(image, for: url)
+            // A result that finishes after the request was cancelled is kept for later (EC-196).
+            await cache.put(image, for: url, version: version)
             return .image(image)
         } catch {
             return .failure(Self.reason(for: error))
         }
     }
 
-    private func decodedImage(for url: URL) async -> Result<DecodedImage, DecodeError> {
-        if let cached = await cache.get(url) {
+    /// Decodes an image file, using the cache only for the same content version (FR-230). A result decoded after the
+    /// content was replaced is stored under the old version and is never returned for the new one (EC-161).
+    /// The decode runs while holding a load slot (FR-282). A request cancelled while waiting for the slot returns
+    /// a failure that the caller discards because its task is cancelled.
+    private func decodedImage(
+        for url: URL,
+        version: FileContentVersion?,
+        priority: ImageLoadPriority = .preview,
+        entry: PrefetchEntry? = nil
+    ) async -> Result<DecodedImage, DecodeError> {
+        if let cached = await cache.get(url, version: version) {
+            return .success(cached)
+        }
+
+        guard await loadScheduler.acquire(priority) else { return .failure(.unreadable) }
+        entry?.isRunning = true
+        let result = await decodeFile(url, version: version)
+        await loadScheduler.release(priority)
+        return result
+    }
+
+    /// Decodes an image file. The caller holds a load slot.
+    private func decodeFile(_ url: URL, version: FileContentVersion?) async -> Result<DecodedImage, DecodeError> {
+        // Another load may have stored the image while this request waited for the slot.
+        if let cached = await cache.get(url, version: version) {
             return .success(cached)
         }
 
         do {
             let image = try await decoder.decode(url, maxPixelSize: max(1, screenMaxPixel))
-            await cache.put(image, for: url)
+            // A result that finishes after the request was cancelled is kept for later (EC-196).
+            await cache.put(image, for: url, version: version)
             return .success(image)
         } catch {
             return .failure(error)
         }
     }
 
+    // MARK: - Replaced Content
+
+    /// URLs of media rows present in both listings whose content version differs (FR-228, research.md R4).
+    nonisolated static func replacedContentURLs(old: [MediaFile], new: [MediaFile]) -> Set<URL> {
+        guard !old.isEmpty else { return [] }
+        var oldVersions: [URL: FileContentVersion?] = [:]
+        oldVersions.reserveCapacity(old.count)
+        for file in old where file.kind.isMedia {
+            oldVersions[file.url] = file.contentVersion
+        }
+        var changed = Set<URL>()
+        for file in new where file.kind.isMedia {
+            guard let previous = oldVersions[file.url], previous != file.contentVersion else { continue }
+            changed.insert(file.url)
+        }
+        return changed
+    }
+
+    /// Publishes replaced rows to the file list, drops their running prefetches, and reloads the preview when the
+    /// focused file is among them (FR-228, FR-229).
+    private func noteReplacedContent(_ changed: Set<URL>) {
+        guard !changed.isEmpty else { return }
+        changedContentURLs = changed
+        contentChangeGeneration &+= 1
+        for url in changed {
+            prefetchTasks.removeValue(forKey: url)?.task?.cancel()
+        }
+        if let focused = selection.focused, changed.contains(focused) {
+            reloadPreviewForReplacedContent(focused)
+        }
+        schedulePrefetch(around: selection.focused)
+    }
+
+    /// Reloads the preview of the focused file after its content was replaced (FR-229, research.md R5).
+    /// Keeps showing a still image until the new one is decoded (EC-162). Videos and entries inside a zip are not
+    /// reloaded (A-142, EC-26).
+    private func reloadPreviewForReplacedContent(_ url: URL) {
+        guard ArchiveURL.parse(url) == nil,
+              let file = listing.files.first(where: { $0.url == url }),
+              case let .media(kind) = file.kind,
+              !kind.isVideo else { return }
+
+        switch preview {
+        case .image:
+            if decoder.isAnimated(url) {
+                loadPreview(for: url)
+                return
+            }
+            previewGeneration += 1
+            previewTask?.cancel()
+            previewTask = nil
+            startImagePreview(for: url, version: file.contentVersion, generation: previewGeneration)
+        case .loading, .animatedImage, .unavailable:
+            loadPreview(for: url)
+        case .empty, .animatedImageData, .video:
+            break
+        }
+    }
+
+    /// Prefetches the neighbors of the focused row, the next image first. Cancels the prefetches of images that are no
+    /// longer neighbors (FR-283). Prefetches run through the load scheduler, one at a time (FR-284).
     private func schedulePrefetch(around url: URL?) {
-        guard let url, let index = listing.files.firstIndex(where: { $0.url == url }) else {
+        var wanted: [MediaFile] = []
+        if let url, let index = listing.files.firstIndex(where: { $0.url == url }) {
+            for neighborIndex in [index + 1, index - 1] where listing.files.indices.contains(neighborIndex) {
+                let file = listing.files[neighborIndex]
+                // Do not prefetch videos or non-media rows (zip files, directories, and `..`).
+                guard file.kind.isMedia, !file.kind.isVideo else { continue }
+                wanted.append(file)
+            }
+        }
+
+        let wantedURLs = Set(wanted.map(\.url))
+        for (staleURL, entry) in prefetchTasks where !wantedURLs.contains(staleURL) {
+            entry.task?.cancel()
+            prefetchTasks.removeValue(forKey: staleURL)
+        }
+
+        for file in wanted {
+            guard prefetchTasks[file.url] == nil else { continue }
+            startPrefetch(of: file)
+        }
+    }
+
+    private func startPrefetch(of file: MediaFile) {
+        let url = file.url
+        let version = file.contentVersion
+
+        if let parsed = ArchiveURL.parse(url) {
+            if let entry = archiveIndex?.entry(at: parsed.path), entry.readability != .readable {
+                return
+            }
+            let maxPixelSize = max(1, screenMaxPixel)
+            let entry = PrefetchEntry()
+            entry.task = Task { [weak self, entry] in
+                guard let self else { return }
+                _ = await self.archiveImage(
+                    for: url,
+                    version: version,
+                    maxPixelSize: maxPixelSize,
+                    priority: .prefetch,
+                    entry: entry
+                )
+                self.finishPrefetch(entry, of: url)
+            }
+            prefetchTasks[url] = entry
             return
         }
 
-        for neighborIndex in [index - 1, index + 1] where listing.files.indices.contains(neighborIndex) {
-            let file = listing.files[neighborIndex]
-            // Do not prefetch videos or non-media rows (zip files, directories, and `..`).
-            guard file.kind.isMedia, !file.kind.isVideo else { continue }
-            guard prefetchTasks[file.url] == nil else { continue }
+        guard !decoder.isAnimated(url) else { return }
+        let entry = PrefetchEntry()
+        entry.task = Task { [weak self, entry] in
+            guard let self else { return }
+            _ = await self.decodedImage(for: url, version: version, priority: .prefetch, entry: entry)
+            self.finishPrefetch(entry, of: url)
+        }
+        prefetchTasks[url] = entry
+    }
 
-            if let parsed = ArchiveURL.parse(file.url) {
-                if let entry = archiveIndex?.entry(at: parsed.path), entry.readability != .readable {
-                    continue
-                }
-                let maxPixelSize = max(1, screenMaxPixel)
-                let task = Task { [weak self] in
-                    guard let self else { return }
-                    _ = await self.archiveImage(for: file.url, maxPixelSize: maxPixelSize)
-                    self.prefetchTasks[file.url] = nil
-                }
-                prefetchTasks[file.url] = task
-                continue
-            }
-
-            guard !decoder.isAnimated(file.url) else { continue }
-            let task = Task { [weak self] in
-                guard let self else { return }
-                _ = await self.decodedImage(for: file.url)
-                self.prefetchTasks[file.url] = nil
-            }
-            prefetchTasks[file.url] = task
+    /// Removes a finished prefetch unless a newer prefetch of the same URL replaced it.
+    private func finishPrefetch(_ entry: PrefetchEntry, of url: URL) {
+        if prefetchTasks[url] === entry {
+            prefetchTasks[url] = nil
         }
     }
 

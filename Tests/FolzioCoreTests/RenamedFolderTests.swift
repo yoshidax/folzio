@@ -88,6 +88,25 @@ struct RenamedFolderTests {
         #expect(renamed.rebase(URL(string: "https://example.com/")!) == nil)
     }
 
+    @Test("Rebases case-only changes without affecting similarly named siblings")
+    func rebasesCaseOnlyRename() {
+        let renamed = RenamedFolder(
+            from: URL(fileURLWithPath: "/tmp/r/Album", isDirectory: true),
+            to: URL(fileURLWithPath: "/tmp/r/album", isDirectory: true)
+        )
+        #expect(renamed.rebase(renamed.from)?.path == "/tmp/r/album")
+        #expect(renamed.rebase(URL(fileURLWithPath: "/tmp/r/Album/sub/photo.png"))?.path
+            == "/tmp/r/album/sub/photo.png")
+        #expect(renamed.reversed.rebase(URL(fileURLWithPath: "/tmp/r/album/sub/photo.png"))?.path
+            == "/tmp/r/Album/sub/photo.png")
+        #expect(renamed.rebase(URL(fileURLWithPath: "/tmp/r/Albums/photo.png")) == nil)
+        let archive = URL(fileURLWithPath: "/tmp/r/Album/photos.zip")
+        let entry = renamed.rebase(ArchiveURL.entry(archive: archive, path: "sub/photo.png"))
+        #expect(entry == ArchiveURL.entry(
+            archive: URL(fileURLWithPath: "/tmp/r/album/photos.zip"), path: "sub/photo.png"
+        ))
+    }
+
     @Test("Returns the same location for itself and descendants when from and to are equal")
     func sameLocationKeepsURLs() {
         let same = RenamedFolder(from: renamed.from, to: renamed.from)

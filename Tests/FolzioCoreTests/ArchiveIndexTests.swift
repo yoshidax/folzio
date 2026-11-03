@@ -152,6 +152,7 @@ struct ArchiveIndexTests {
         #expect(directory.kind == .directory)
         #expect(directory.typeDescription == FixtureKit.kindNames.folder)
         #expect(directory.fileSize == 0)
+        #expect(directory.modificationDate == directory.creationDate)
         #expect(directory.url == ArchiveURL.entry(archive: archive, path: "folder/"))
 
         let photo = try #require(index.items(in: "folder/").first)
@@ -159,6 +160,7 @@ struct ArchiveIndexTests {
         #expect(photo.kind == .media(.jpeg))
         #expect(!photo.typeDescription.isEmpty)
         #expect(photo.creationDate == modified)
+        #expect(photo.modificationDate == modified)
         #expect(photo.fileSize == 1234)
         #expect(photo.url == ArchiveURL.entry(archive: archive, path: "folder/photo.jpg"))
         #expect(index.entry(at: "folder/photo.jpg")?.uncompressedSize == 1234)

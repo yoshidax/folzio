@@ -1,7 +1,7 @@
 import Foundation
 
-/// Searches for supported media files and folders whose names match at every level below the search root
-/// (FR-083, 085, 139; research.md R1).
+/// Searches for supported media files, folders, and (when requested) zip files whose names match at every level
+/// below the search root (FR-083, 085, 139, 278; research.md R1).
 public protocol FileNameSearching: Sendable {
     /// Yields matching media files and folders in small batches and finishes the stream after traversing every level.
     /// Terminating the stream (including cancellation) stops enumeration.
@@ -26,7 +26,10 @@ extension FileNameSearching {
 /// - Records a directory in `SearchRequest.visits` immediately before matching it (files are not recorded). When
 ///   `matchesRoot` is true, also records and matches the root itself (FR-105, EC-94).
 /// - Skips folders without read permission and continues. Returns a row when the name matches.
-/// - Does not enumerate on the UI thread. Does not open zips (`.zip` is neither supported media nor a folder).
+/// - Matches a zip file (`.zip`, case-insensitive) by its name only when `SearchRequest.includesArchives` is true,
+///   with the same hidden, package, and symbolic link rules as other files. Never opens a zip or matches its
+///   contents. A directory named `x.zip` is still a folder row.
+/// - Does not enumerate on the UI thread.
 public struct FileNameSearcher: FileNameSearching {
     private let kindNames: KindNames
     private let batchSize: Int
@@ -85,6 +88,8 @@ public struct FileNameSearcher: FileNameSearching {
                     at: url,
                     values: values,
                     pattern: request.pattern,
+                    includesArchives: request.includesArchives,
+                    kindNames: kindNames,
                     rebase: rebase
                 ) {
                     pending.append(file)
@@ -172,24 +177,35 @@ public struct FileNameSearcher: FileNameSearching {
     }
 
     private static func folderRow(at url: URL, kindNames: KindNames) -> MediaFile {
-        let creationDate = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate
-        return DirectoryLister.folderRow(at: url, creationDate: creationDate, kindNames: kindNames)
+        let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
+        return DirectoryLister.folderRow(
+            at: url, creationDate: values?.creationDate, modificationDate: values?.contentModificationDate,
+            kindNames: kindNames
+        )
     }
 
     private static func matchedFile(
         at enumeratedURL: URL,
         values: URLResourceValues?,
         pattern: SearchPattern,
+        includesArchives: Bool,
+        kindNames: KindNames,
         rebase: (URL) -> URL
     ) -> MediaFile? {
         let url = enumeratedURL
         if values?.isDirectory == true { return nil }
-        guard let kind = MediaKind(fileExtension: url.pathExtension),
+        let kind = MediaKind(fileExtension: url.pathExtension)
+        let isArchive = includesArchives && DirectoryLister.isArchive(url)
+        guard kind != nil || isArchive,
               pattern.matches(fileName: url.lastPathComponent) else { return nil }
         if values?.isSymbolicLink == true,
            (try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
             return nil
         }
-        return DirectoryLister.mediaFile(at: rebase(url), kind: kind)
+        if let kind {
+            return DirectoryLister.mediaFile(at: rebase(url), kind: kind)
+        }
+        // Only the name of a zip is matched; its contents are never opened (FR-083, 278).
+        return DirectoryLister.archiveRow(at: rebase(url), kindNames: kindNames)
     }
 }

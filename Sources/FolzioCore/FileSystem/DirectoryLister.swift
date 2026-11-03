@@ -22,20 +22,22 @@ extension DirectoryListing {
 }
 
 public struct DirectoryLister: DirectoryListing {
-    private static let fileKeys: Set<URLResourceKey> = [
+    private static let fileKeys = Set<URLResourceKey>([
         .creationDateKey,
+        .contentModificationDateKey,
         .isDirectoryKey,
         .contentTypeKey,
         .fileSizeKey,
         .localizedTypeDescriptionKey,
-    ]
+    ]).union(FileContentVersion.resourceKeys)
 
     /// Keys used for media row values (used by search, which reads only matching files)
-    private static let mediaKeys: Set<URLResourceKey> = [
+    private static let mediaKeys = Set<URLResourceKey>([
         .creationDateKey,
+        .contentModificationDateKey,
         .fileSizeKey,
         .localizedTypeDescriptionKey,
-    ]
+    ]).union(FileContentVersion.resourceKeys)
 
     private static let archiveExtension = "zip"
 
@@ -80,19 +82,14 @@ public struct DirectoryLister: DirectoryListing {
                     // As in the tree, do not show packages (such as .app) as folders (R29).
                     // isPackage is expensive, so query it only for directories.
                     guard (try? url.resourceValues(forKeys: [.isPackageKey]))?.isPackage != true else { return nil }
-                    return Self.folderRow(at: url, creationDate: values?.creationDate, kindNames: kindNames)
+                    return Self.folderRow(
+                        at: url, creationDate: values?.creationDate,
+                        modificationDate: values?.contentModificationDate, kindNames: kindNames
+                    )
                 }
 
-                if url.pathExtension.lowercased() == Self.archiveExtension {
-                    return MediaFile(
-                        url: url,
-                        name: url.lastPathComponent,
-                        kind: .archive,
-                        typeDescription: values?.localizedTypeDescription ?? kindNames.zipArchive,
-                        creationDate: values?.creationDate,
-                        fileSize: Int64(values?.fileSize ?? 0),
-                        kindNameSource: values?.localizedTypeDescription == nil ? .zipArchive : nil
-                    )
+                if Self.isArchive(url) {
+                    return Self.archiveRow(at: url, values: values, kindNames: kindNames)
                 }
                 guard let kind = MediaKind(fileExtension: url.pathExtension) else { return nil }
                 return Self.mediaFile(at: url, kind: kind, values: values)
@@ -102,15 +99,42 @@ public struct DirectoryLister: DirectoryListing {
 
     /// Builds a folder row. Shared with `FileNameSearcher` so listings and search results use the same values
     /// (FR-139, R1).
-    static func folderRow(at url: URL, creationDate: Date?, kindNames: KindNames) -> MediaFile {
+    static func folderRow(
+        at url: URL, creationDate: Date?, modificationDate: Date? = nil, kindNames: KindNames
+    ) -> MediaFile {
         MediaFile(
             url: url,
             name: url.lastPathComponent,
             kind: .folder,
             typeDescription: kindNames.folder,
             creationDate: creationDate,
+            modificationDate: modificationDate,
             fileSize: 0,
             kindNameSource: .folder
+        )
+    }
+
+    /// Whether the URL names a zip file (extension `.zip`, case-insensitive; FR-068).
+    static func isArchive(_ url: URL) -> Bool {
+        url.pathExtension.lowercased() == archiveExtension
+    }
+
+    /// Builds a zip file row. Shared with `FileNameSearcher` so listings and search results use the same values
+    /// (FR-279).
+    static func archiveRow(at url: URL, kindNames: KindNames) -> MediaFile {
+        archiveRow(at: url, values: try? url.resourceValues(forKeys: mediaKeys), kindNames: kindNames)
+    }
+
+    private static func archiveRow(at url: URL, values: URLResourceValues?, kindNames: KindNames) -> MediaFile {
+        MediaFile(
+            url: url,
+            name: url.lastPathComponent,
+            kind: .archive,
+            typeDescription: values?.localizedTypeDescription ?? kindNames.zipArchive,
+            creationDate: values?.creationDate,
+            modificationDate: values?.contentModificationDate,
+            fileSize: Int64(values?.fileSize ?? 0),
+            kindNameSource: values?.localizedTypeDescription == nil ? .zipArchive : nil
         )
     }
 
@@ -127,7 +151,9 @@ public struct DirectoryLister: DirectoryListing {
             kind: .media(kind),
             typeDescription: values?.localizedTypeDescription ?? kind.rawValue.uppercased(),
             creationDate: values?.creationDate,
-            fileSize: Int64(values?.fileSize ?? 0)
+            modificationDate: values?.contentModificationDate,
+            fileSize: Int64(values?.fileSize ?? 0),
+            contentVersion: FileContentVersion(resourceValues: values)
         )
     }
 

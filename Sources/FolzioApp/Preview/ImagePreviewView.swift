@@ -39,14 +39,12 @@ final class ImagePreviewView: NSView {
     private let nameLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
     private let spinner = NSProgressIndicator()
-    private let doubleClickRecognizer = NSClickGestureRecognizer()
     // NSScroller determines its orientation from the initial frame, so create it already wide or tall.
     private let horizontalScroller = NSScroller(frame: NSRect(x: 0, y: 0, width: 100, height: 15))
     private let verticalScroller = NSScroller(frame: NSRect(x: 0, y: 0, width: 15, height: 100))
     private var scrollCenter = CGPoint(x: 0.5, y: 0.5)
     private var scrollLayout = PreviewScrollLayout(imageSize: .zero, viewport: .zero, center: .zero)
 
-    var onDoubleClick: (() -> Void)?
     /// Called when whether an image is displayed changes (first frame or clearing the image).
     var onDisplayedImageChange: (() -> Void)?
 
@@ -133,12 +131,6 @@ final class ImagePreviewView: NSView {
             messageStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
             messageStack.widthAnchor.constraint(lessThanOrEqualToConstant: 440),
         ])
-
-        doubleClickRecognizer.numberOfClicksRequired = 2
-        doubleClickRecognizer.delaysPrimaryMouseButtonEvents = false
-        doubleClickRecognizer.target = self
-        doubleClickRecognizer.action = #selector(handleDoubleClick(_:))
-        addGestureRecognizer(doubleClickRecognizer)
 
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
@@ -471,11 +463,6 @@ final class ImagePreviewView: NSView {
             width: fitted.width / scale,
             height: fitted.height / scale
         )
-    }
-
-    @objc private func handleDoubleClick(_ recognizer: NSClickGestureRecognizer) {
-        guard recognizer.state == .ended else { return }
-        onDoubleClick?()
     }
 
     @objc private func accessibilityDisplayOptionsDidChange(_ notification: Notification) {

@@ -18,6 +18,8 @@ public enum TreeContextMenuItem: Sendable, Equatable {
     case renameFavorite
     /// Renames a regular folder in the tree (FR-103)
     case renameFolder
+    /// Creates a folder in the row's folder (FR-208)
+    case newFolder
     case separator
 }
 
@@ -77,19 +79,33 @@ public enum FavoriteCommands {
         }
     }
 
+    /// Folder in which New Folder creates a folder (FR-208). Returns a URL for `.folder` (including the home and
+    /// volume roots) and `.favorite` (the registered folder). Returns nil for `.favoritesHeader` and nil.
+    /// The UI still disables a favorite whose folder was found missing.
+    public static func newFolderTarget(_ role: TreeItemRole?) -> URL? {
+        switch role {
+        case .folder(let url), .favorite(let url):
+            return url
+        case .favoritesHeader, nil:
+            return nil
+        }
+    }
+
     /// Context menu items and their order. `.favoritesHeader` returns an empty array (no menu).
-    /// For rows where `trashTarget` returns a URL, places `.moveToTrash` and `.renameFolder` first, each followed by
+    /// Folder and favorite menus start with `.newFolder` and a separator, as in Finder (FR-208).
+    /// For rows where `trashTarget` returns a URL, places `.moveToTrash` and `.renameFolder` next, each followed by
     /// a separator (A-37). The default value of `roots` is empty, which omits `.moveToTrash` and `.renameFolder`.
     public static func contextMenu(for role: TreeItemRole, roots: [URL] = []) -> [TreeContextMenuItem] {
         switch role {
         case .folder:
             let items: [TreeContextMenuItem] =
                 [.pasteHere, .movePasteHere, .separator, .addToFavorites, .separator, .copyPathname, .revealInFinder]
+            let newFolder: [TreeContextMenuItem] = [.newFolder, .separator]
             return trashTarget(role, roots: roots) != nil
-                ? [.moveToTrash, .separator, .renameFolder, .separator] + items
-                : items
+                ? newFolder + [.moveToTrash, .separator, .renameFolder, .separator] + items
+                : newFolder + items
         case .favorite:
-            return [.renameFavorite, .removeFromFavorites, .separator, .copyPathname]
+            return [.newFolder, .separator, .renameFavorite, .removeFromFavorites, .separator, .copyPathname]
         case .favoritesHeader:
             return []
         }

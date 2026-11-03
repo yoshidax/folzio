@@ -53,4 +53,10 @@ public struct ListItemCommands: Sendable, Equatable {
     public var allowsPaste: Bool {
         !isBrowsingArchive && !isShowingSearchResults
     }
+
+    /// New Folder in the displayed folder (FR-208, FR-212). Does not depend on the row kind. Unavailable inside a zip,
+    /// which is read-only, and while showing search results, which have no single destination folder (A-123).
+    public var allowsNewFolder: Bool {
+        !isBrowsingArchive && !isShowingSearchResults
+    }
 }

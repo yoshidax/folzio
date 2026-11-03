@@ -208,4 +208,21 @@ struct ListItemCommandsTests {
             )
         }
     }
+    @Test("New Folder in the list is available in regular folders for every row kind and no selection (FR-212)")
+    func newFolderInRegularFolder() {
+        for kind in Self.allKinds.map(Optional.some) + [nil] {
+            #expect(ListItemCommands(kind: kind, isBrowsingArchive: false).allowsNewFolder, "kind=\(String(describing: kind))")
+        }
+    }
+
+    @Test("New Folder in the list is unavailable inside a zip and while showing search results (FR-212)")
+    func newFolderUnavailableInArchiveAndSearch() {
+        for kind in Self.allKinds.map(Optional.some) + [nil] {
+            #expect(!ListItemCommands(kind: kind, isBrowsingArchive: true).allowsNewFolder, "kind=\(String(describing: kind))")
+            #expect(
+                !ListItemCommands(kind: kind, isBrowsingArchive: false, isShowingSearchResults: true).allowsNewFolder,
+                "kind=\(String(describing: kind))"
+            )
+        }
+    }
 }

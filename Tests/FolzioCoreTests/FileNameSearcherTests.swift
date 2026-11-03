@@ -395,3 +395,145 @@ private final class BatchCounter {
         total += count
     }
 }
+
+// MARK: - Zip Files (TAK-51; FR-083, 269, 270)
+
+extension FileNameSearcherTests {
+    /// Layout (names only matter; the zips are real except where noted):
+    ///
+    /// ```
+    /// root/trip_2024.zip  Trip.ZIP  notes.txt  archive.zip  archive.zip.bak  archive.zipx
+    /// root/photos.zip              (contains kyoto/kyoto_01.jpg)
+    /// root/a/backup.zip  root/b/backup.zip
+    /// root/real/trip_linked.zip
+    /// root/linkdir          -> real        (symbolic link to a folder)
+    /// root/link_trip.zip    -> trip_2024.zip (symbolic link to a file)
+    /// root/trip_dir.zip     -> real        (symbolic link to a folder named like a zip)
+    /// root/folder.zip/inner.txt            (a folder named like a zip)
+    /// root/.hidden/trip_h.zip  root/.trip_hidden.zip
+    /// ```
+    private func makeArchiveEnv() throws -> (base: URL, root: URL) {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FileNameSearcherTests-zip-\(UUID().uuidString)", isDirectory: true)
+        let root = base.appendingPathComponent("root", isDirectory: true)
+        let fileManager = FileManager.default
+        for path in ["a", "b", "real", "folder.zip", ".hidden"] {
+            try fileManager.createDirectory(
+                at: root.appendingPathComponent(path, isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+        for path in [
+            "trip_2024.zip", "Trip.ZIP", "archive.zip", "archive.zip.bak", "archive.zipx", "notes.txt",
+            "a/backup.zip", "b/backup.zip", "real/trip_linked.zip", "folder.zip/inner.txt",
+            ".hidden/trip_h.zip", ".trip_hidden.zip",
+        ] {
+            fileManager.createFile(atPath: root.appendingPathComponent(path).path, contents: Data())
+        }
+        try ZipFixtureWriter.write(
+            [ZipFixtureEntry(name: "kyoto/kyoto_01.jpg", content: .bytes(Data(count: 16)), method: .stored)],
+            to: root.appendingPathComponent("photos.zip")
+        )
+        try fileManager.createSymbolicLink(
+            at: root.appendingPathComponent("linkdir"),
+            withDestinationURL: root.appendingPathComponent("real", isDirectory: true)
+        )
+        try fileManager.createSymbolicLink(
+            at: root.appendingPathComponent("link_trip.zip"),
+            withDestinationURL: root.appendingPathComponent("trip_2024.zip")
+        )
+        try fileManager.createSymbolicLink(
+            at: root.appendingPathComponent("trip_dir.zip"),
+            withDestinationURL: root.appendingPathComponent("real", isDirectory: true)
+        )
+        return (base, root)
+    }
+
+    private func collectRows(in root: URL, _ keyword: String, includesArchives: Bool) async throws -> [MediaFile] {
+        let pattern = try #require(SearchPattern(keyword: keyword))
+        let searcher = FileNameSearcher(kindNames: FixtureKit.kindNames)
+        var rows: [MediaFile] = []
+        for await batch in searcher.search(
+            SearchRequest(root: root, pattern: pattern, includesArchives: includesArchives)
+        ) {
+            rows += batch
+        }
+        return rows
+    }
+
+    @Test("With zip files on, a name match returns zip rows (case-insensitive) and skips hidden items and folder links")
+    func matchesZipNamesWhenIncluded() async throws {
+        let (base, root) = try makeArchiveEnv()
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let rows = try await collectRows(in: root, "trip", includesArchives: true)
+
+        #expect(relativePaths(rows, root: root) == [
+            "trip_2024.zip", "Trip.ZIP", "link_trip.zip", "real/trip_linked.zip",
+        ])
+        #expect(rows.allSatisfy { $0.kind == .archive })
+        // Zip rows carry the same values as the directory listing produces.
+        let row = try #require(rows.first { $0.name == "trip_2024.zip" })
+        #expect(row.typeDescription.isEmpty == false)
+    }
+
+    @Test("With zip files off (the default), zip files are neither matched nor returned")
+    func ignoresZipsWhenNotIncluded() async throws {
+        let (base, root) = try makeArchiveEnv()
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let rows = try await collectRows(in: root, "trip", includesArchives: false)
+        #expect(rows.isEmpty)
+
+        let defaulted = try await collect(in: root, "trip").flatMap { $0 }
+        #expect(defaulted.isEmpty)
+    }
+
+    @Test("Only the name of a zip is matched, never its contents")
+    func doesNotSearchInsideZips() async throws {
+        let (base, root) = try makeArchiveEnv()
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let inner = try await collectRows(in: root, "kyoto", includesArchives: true)
+        #expect(inner.isEmpty)
+
+        let byName = try await collectRows(in: root, "photos", includesArchives: true)
+        #expect(relativePaths(byName, root: root) == ["photos.zip"])
+    }
+
+    @Test("A wildcard matches the whole name, so only names ending in .zip match")
+    func wildcardMatchesWholeZipName() async throws {
+        let (base, root) = try makeArchiveEnv()
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let rows = try await collectRows(in: root, "*.zip", includesArchives: true)
+
+        #expect(relativePaths(rows, root: root) == [
+            "trip_2024.zip", "Trip.ZIP", "link_trip.zip", "real/trip_linked.zip", "archive.zip",
+            "photos.zip", "a/backup.zip", "b/backup.zip", "folder.zip",
+        ])
+    }
+
+    @Test("Zips with the same name in different folders are separate rows with different URLs")
+    func sameNamedZipsAreSeparateRows() async throws {
+        let (base, root) = try makeArchiveEnv()
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let rows = try await collectRows(in: root, "backup", includesArchives: true)
+
+        #expect(relativePaths(rows, root: root) == ["a/backup.zip", "b/backup.zip"])
+        #expect(Set(rows.map(\.url)).count == 2)
+    }
+
+    @Test("A folder named like a zip stays a folder row and does not depend on the zip setting")
+    func folderNamedLikeZipStaysFolder() async throws {
+        let (base, root) = try makeArchiveEnv()
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        for includesArchives in [false, true] {
+            let rows = try await collectRows(in: root, "folder", includesArchives: includesArchives)
+            #expect(relativePaths(rows, root: root) == ["folder.zip"])
+            #expect(rows.first?.kind == .folder)
+        }
+    }
+}

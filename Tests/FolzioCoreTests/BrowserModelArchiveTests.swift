@@ -189,8 +189,8 @@ struct BrowserModelArchiveTests {
         #expect(model.listing.state == .loaded)
         #expect(model.listing.files[0].kind == .parent)
         #expect(model.listing.files[0].url == env.parentLink())
-        // Directories and media are interleaved in natural name order.
-        #expect(model.listing.files.dropFirst().map(\.name) == ["anim.gif", "b.png", "sub"])
+        // Directories come before media, each group in natural name order (FR-288).
+        #expect(model.listing.files.dropFirst().map(\.name) == ["sub", "anim.gif", "b.png"])
         #expect(model.listing.files.filter { $0.kind == .parent }.count == 1)
         #expect(model.selection.selected.isEmpty)
         #expect(model.selection.focused == nil)
@@ -441,9 +441,9 @@ struct BrowserModelArchiveTests {
         var cached = false
         let deadline = ContinuousClock.now + .seconds(3)
         while ContinuousClock.now < deadline {
-            let a = await cache.get(env.entry("a.jpg"))
-            let c = await cache.get(env.entry("c.jpg"))
-            if a != nil, c != nil { cached = true; break }
+            let a = await cache.containsEntry(for: env.entry("a.jpg"))
+            let c = await cache.containsEntry(for: env.entry("c.jpg"))
+            if a, c { cached = true; break }
             try? await Task.sleep(for: .milliseconds(10))
         }
         #expect(cached)
@@ -498,7 +498,7 @@ struct BrowserModelArchiveTests {
         #expect(env.model.listing.state == .noMatches)
 
         env.model.setMediaTypeFilter(MediaTypeFilter())
-        #expect(env.model.listing.files.map(\.name) == ["..", "a.jpg", "dir"])
+        #expect(env.model.listing.files.map(\.name) == ["..", "dir", "a.jpg"])
         #expect(env.model.listing.state == .loaded)
     }
 
@@ -607,6 +607,46 @@ struct BrowserModelArchiveTests {
 
         #expect(env.model.listing.archive == nil)
         #expect(env.model.listing.files.map(\.name) == ["cover.jpg"])
+        #expect(isEmptyPreview(env.model.preview))
+    }
+
+    @Test("Leaves the zip when the folder containing it is renamed and only its parent is reported (FR-042, EC-13)")
+    func renamedContainingFolderLeavesArchive() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        await env.model.selectFolder(env.root)
+        await env.model.openItem(env.zip)
+        let png = env.entry("b.png")
+        env.model.select([png], focused: png)
+
+        let parent = env.root.deletingLastPathComponent()
+        let renamed = parent.appendingPathComponent(env.root.lastPathComponent + "-renamed", isDirectory: true)
+        try FileManager.default.moveItem(at: env.root, to: renamed)
+        defer { try? FileManager.default.removeItem(at: renamed) }
+        await env.model.handleFileSystemEvent([parent])
+
+        #expect(env.model.listing.archive == nil)
+        #expect(env.model.listing.folder.standardizedFileURL.path == parent.standardizedFileURL.path)
+        #expect(env.model.selection.selected.isEmpty)
+        #expect(isEmptyPreview(env.model.preview))
+    }
+
+    @Test("Removing the volume while inside a zip leaves the zip and shows the containing folder as not found (EC-18)")
+    func volumeRemovalInsideArchiveShowsNotFound() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        await env.model.selectFolder(env.root)
+        await env.model.openItem(env.zip)
+        let png = env.entry("b.png")
+        env.model.select([png], focused: png)
+
+        try FileManager.default.removeItem(at: env.root)
+        await env.model.handleVolumesChanged()
+
+        #expect(env.model.listing.archive == nil)
+        #expect(env.model.listing.folder == env.root)
+        #expect(env.model.listing.state == .failed(.folderNotFound))
+        #expect(env.model.selection.selected.isEmpty)
         #expect(isEmptyPreview(env.model.preview))
     }
 

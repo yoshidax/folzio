@@ -39,15 +39,20 @@ public func sortedMerge(_ existing: [MediaFile], _ incoming: [MediaFile], by ord
     return result
 }
 
-/// Returns true when `a` precedes `b`, false when it follows, and nil when they tie. A nil creation date sorts
-/// last regardless of direction; when column values are equal, the natural name order (ascending) is the secondary
-/// key.
+/// Returns true when `a` precedes `b`, false when it follows, and nil when they tie. A missing creation or
+/// modification date sorts last regardless of direction; when column values are equal, the natural name order
+/// (ascending) is the secondary key. Folders count as 0 bytes when sorting by size, as in Finder. When sorting by
+/// name, folder rows always come before file rows in both directions, and each group is ordered by name (FR-288).
 private func precedes(_ a: MediaFile, _ b: MediaFile, by order: SortOrder) -> Bool? {
-    if order.column == .creationDate {
-        if a.creationDate == nil, b.creationDate != nil {
+    if order.column == .name, a.kind.isFolderRow != b.kind.isFolderRow {
+        return a.kind.isFolderRow
+    }
+
+    if let dates = dateAccessor(for: order.column) {
+        if dates(a) == nil, dates(b) != nil {
             return false
         }
-        if a.creationDate != nil, b.creationDate == nil {
+        if dates(a) != nil, dates(b) == nil {
             return true
         }
     }
@@ -64,23 +69,46 @@ private func precedes(_ a: MediaFile, _ b: MediaFile, by order: SortOrder) -> Bo
     return nil
 }
 
+private func dateAccessor(for column: SortColumn) -> ((MediaFile) -> Date?)? {
+    switch column {
+    case .creationDate:
+        return { $0.creationDate }
+    case .modificationDate:
+        return { $0.modificationDate }
+    case .name, .kind, .size, .location:
+        return nil
+    }
+}
+
+private func compareDates(_ lhs: Date?, _ rhs: Date?) -> ComparisonResult {
+    switch (lhs, rhs) {
+    case let (.some(lhs), .some(rhs)):
+        if lhs < rhs { return .orderedAscending }
+        if lhs > rhs { return .orderedDescending }
+        return .orderedSame
+    case (nil, nil):
+        return .orderedSame
+    case (nil, .some):
+        return .orderedDescending
+    case (.some, nil):
+        return .orderedAscending
+    }
+}
+
 private func comparePrimary(_ a: MediaFile, _ b: MediaFile, column: SortColumn) -> ComparisonResult {
     switch column {
     case .name:
         return a.name.localizedStandardCompare(b.name)
     case .creationDate:
-        switch (a.creationDate, b.creationDate) {
-        case let (.some(lhs), .some(rhs)):
-            if lhs < rhs { return .orderedAscending }
-            if lhs > rhs { return .orderedDescending }
-            return .orderedSame
-        case (nil, nil):
-            return .orderedSame
-        case (nil, .some):
-            return .orderedDescending
-        case (.some, nil):
-            return .orderedAscending
-        }
+        return compareDates(a.creationDate, b.creationDate)
+    case .modificationDate:
+        return compareDates(a.modificationDate, b.modificationDate)
+    case .size:
+        let lhs = a.hasFileSize ? a.fileSize : 0
+        let rhs = b.hasFileSize ? b.fileSize : 0
+        if lhs < rhs { return .orderedAscending }
+        if lhs > rhs { return .orderedDescending }
+        return .orderedSame
     case .kind:
         let lhs = a.typeDescription.localizedStandardCompare(b.typeDescription)
         if lhs != .orderedSame {

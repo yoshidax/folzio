@@ -11,17 +11,22 @@ public struct SearchRequest: Sendable {
     public var matchesRoot: Bool
     /// Log where directories are recorded immediately before enumeration matches them
     public var visits: SearchVisitLog
+    /// Whether zip files (`.zip`) are matched by name. Fixed when the search starts from the "Show Zip Files"
+    /// setting and does not change while the search runs (FR-278). The contents of a zip are never searched.
+    public var includesArchives: Bool
 
     public init(
         root: URL,
         pattern: SearchPattern,
         matchesRoot: Bool = false,
-        visits: SearchVisitLog = SearchVisitLog()
+        visits: SearchVisitLog = SearchVisitLog(),
+        includesArchives: Bool = false
     ) {
         self.root = root
         self.pattern = pattern
         self.matchesRoot = matchesRoot
         self.visits = visits
+        self.includesArchives = includesArchives
     }
 }
 

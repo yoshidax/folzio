@@ -7,6 +7,74 @@ import Testing
 struct FileOperationServiceTests {
     private let service = FileOperationService()
 
+    @Test("Replacing an ancestor of the source is rejected before either item changes")
+    func refusesReplacingSourceAncestor() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let parent = root.appendingPathComponent("album", isDirectory: true)
+        let source = parent.appendingPathComponent("album", isDirectory: true)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        let marker = source.appendingPathComponent("photo.txt")
+        try Data("original".utf8).write(to: marker)
+        let alias = root.appendingPathComponent("alias", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: parent)
+
+        for kind in [FileOperation.Kind.copy, .move] {
+            for path in [source, alias.appendingPathComponent("album", isDirectory: true)] {
+                let result = await service.execute(
+                    FileOperation(kind: kind, sources: [path], destination: root), resolution: .replace
+                )
+                #expect(result.succeeded.isEmpty)
+                #expect(result.failed.first?.reason == .replacementContainsSource)
+                #expect(try Data(contentsOf: marker) == Data("original".utf8))
+            }
+        }
+        let kept = await service.execute(
+            FileOperation(kind: .copy, sources: [source], destination: root), resolution: .keepBoth
+        )
+        #expect(kept.failed.isEmpty)
+        #expect(try Data(contentsOf: root.appendingPathComponent("album 2/photo.txt")) == Data("original".utf8))
+    }
+
+    @Test("Replacement cannot remove another selected source")
+    func refusesReplacingAncestorOfAnotherSource() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = root.appendingPathComponent("album", isDirectory: true)
+        let external = root.appendingPathComponent("external/album", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
+        let otherSource = target.appendingPathComponent("photo.txt")
+        try Data("selected".utf8).write(to: otherSource)
+
+        let result = await service.execute(
+            FileOperation(kind: .copy, sources: [external, otherSource], destination: root), resolution: .replace
+        )
+        #expect(result.failed.count == 1)
+        #expect(result.failed.first?.url == external)
+        #expect(result.failed.first?.reason == .replacementContainsSource)
+        #expect(try Data(contentsOf: otherSource) == Data("selected".utf8))
+        #expect(try Data(contentsOf: root.appendingPathComponent("photo.txt")) == Data("selected".utf8))
+    }
+
+    @Test("A similarly prefixed sibling is not treated as an ancestor")
+    func allowsReplacingSimilarlyNamedSibling() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = root.appendingPathComponent("album", isDirectory: true)
+        let source = root.appendingPathComponent("album-extra/album", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try Data("source".utf8).write(to: source.appendingPathComponent("photo.txt"))
+
+        let result = await service.execute(
+            FileOperation(kind: .copy, sources: [source], destination: root), resolution: .replace
+        )
+        #expect(result.failed.isEmpty)
+        #expect(try Data(contentsOf: target.appendingPathComponent("photo.txt")) == Data("source".utf8))
+        #expect(FileManager.default.fileExists(atPath: source.path))
+    }
+
     @Test("Rejects replacing an item with itself without deleting the original")
     func refusesReplaceOfSource() async throws {
         let root = try makeTemporaryDirectory()
@@ -79,6 +147,236 @@ struct FileOperationServiceTests {
         #expect(result.succeeded == [renamed])
         #expect(!FileManager.default.fileExists(atPath: source.path))
         #expect(FileManager.default.fileExists(atPath: renamed.path))
+    }
+
+    @Test("Case-only file renames preserve contents and store the requested spelling", arguments: [
+        "Photo.png", "photo.PNG",
+    ])
+    func renamesFileCaseOnly(newName: String) async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try makeOps(in: root)
+        let source = folder.appendingPathComponent("photo.png")
+        let bytes = Data("case-only rename".utf8)
+        try bytes.write(to: source)
+        let result = await service.execute(
+            FileOperation(kind: .rename(newName: newName), sources: [source]), resolution: .abort
+        )
+        #expect(result.failed.isEmpty)
+        #expect(result.succeeded.map(\.lastPathComponent) == [newName])
+        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        #expect(names.contains(newName))
+        #expect(!names.contains("photo.png"))
+        #expect(try Data(contentsOf: folder.appendingPathComponent(newName)) == bytes)
+    }
+
+    @Test("Case-only rename accepts the cached URL returned by directory enumeration", arguments: [
+        "Hans-veth-vyQgv-eURTU-unsplash.jpg", "hans-veth-vyQgv-eURTU-unsplash.JPG",
+    ])
+    func renamesEnumeratedFileCaseOnly(newName: String) async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try makeOps(in: root)
+        let oldName = "hans-veth-vyQgv-eURTU-unsplash.jpg"
+        let bytes = Data("enumerated file".utf8)
+        try bytes.write(to: folder.appendingPathComponent(oldName))
+        let listed = try await DirectoryLister(kindNames: FixtureKit.kindNames).mediaFiles(in: folder)
+        let source = try #require(listed.first { $0.name == oldName }).url
+        let result = await service.execute(
+            FileOperation(kind: .rename(newName: newName), sources: [source]), resolution: .abort
+        )
+        #expect(result.failed.isEmpty)
+        #expect(result.succeeded.map(\.lastPathComponent) == [newName])
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).contains(newName))
+        #expect(try Data(contentsOf: folder.appendingPathComponent(newName)) == bytes)
+    }
+
+    @Test("Rename rejects a different entry for every conflict resolution", arguments: [
+        ConflictResolution.abort, .replace, .keepBoth,
+    ])
+    func refusesRenameReplacement(resolution: ConflictResolution) async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try makeOps(in: root)
+        let source = folder.appendingPathComponent("a.jpg")
+        let existing = folder.appendingPathComponent("taken.jpg")
+        let before = try Data(contentsOf: source)
+        try Data("other".utf8).write(to: existing)
+        let result = await service.execute(
+            FileOperation(kind: .rename(newName: "TAKEN.JPG"), sources: [source]), resolution: resolution
+        )
+        #expect(result.succeeded.isEmpty)
+        #expect(result.failed.first?.reason == .sameNameExists)
+        #expect(try Data(contentsOf: source) == before)
+        #expect(try Data(contentsOf: existing) == Data("other".utf8))
+    }
+
+    @Test("Rename treats links as separate entries, including dangling links", arguments: [
+        "hard", "symbolic", "dangling",
+    ], [ConflictResolution.abort, .replace, .keepBoth])
+    func refusesRenameOverLink(linkKind: String, resolution: ConflictResolution) async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try makeOps(in: root)
+        let source = folder.appendingPathComponent("a.jpg")
+        let link = folder.appendingPathComponent("other.jpg")
+        let before = try Data(contentsOf: source)
+        if linkKind == "hard" {
+            try FileManager.default.linkItem(at: source, to: link)
+        } else {
+            try FileManager.default.createSymbolicLink(
+                at: link, withDestinationURL: linkKind == "dangling" ? folder.appendingPathComponent("missing") : source
+            )
+        }
+        let result = await service.execute(
+            FileOperation(kind: .rename(newName: "other.jpg"), sources: [source]), resolution: resolution
+        )
+        #expect(result.succeeded.isEmpty)
+        #expect(result.failed.first?.reason == .sameNameExists)
+        #expect(try Data(contentsOf: source) == before)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).contains("other.jpg"))
+        if linkKind != "hard" {
+            #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path)
+                == (linkKind == "dangling" ? folder.appendingPathComponent("missing").path : source.path))
+        }
+    }
+
+    @Test("Rename failures in unreadable or unwritable parents preserve the source", arguments: [0o111, 0o555])
+    func refusesRenameInRestrictedParent(permissions: Int) async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try makeOps(in: root)
+        let source = folder.appendingPathComponent("a.jpg")
+        let before = try Data(contentsOf: source)
+        try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: folder.path)
+        let result = await service.execute(
+            FileOperation(kind: .rename(newName: "A.JPG"), sources: [source]), resolution: .abort
+        )
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+        #expect(result.succeeded.isEmpty)
+        let failure = try #require(result.failed.first)
+        guard case .systemFailure = failure.reason else {
+            Issue.record("Expected a system error, got \(failure.reason)")
+            return
+        }
+        #expect(try Data(contentsOf: source) == before)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).contains("a.jpg"))
+    }
+
+    private static let hasCaseSensitiveNames: Bool = {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("FolzioCaseProbe-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        do {
+            try fm.createDirectory(at: root, withIntermediateDirectories: true)
+            try Data().write(to: root.appendingPathComponent("probe"))
+            return !fm.fileExists(atPath: root.appendingPathComponent("PROBE").path)
+        } catch {
+            return false
+        }
+    }()
+
+    @Test("Case-sensitive volumes still reject a separate case-equivalent entry",
+          .enabled(if: FileOperationServiceTests.hasCaseSensitiveNames, "Requires a case-sensitive temporary volume"),
+          arguments: ["file", "hard", "symbolic"], [ConflictResolution.abort, .replace, .keepBoth])
+    func refusesSeparateCaseEquivalentEntry(kind: String, resolution: ConflictResolution) async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try makeOps(in: root)
+        let source = folder.appendingPathComponent("photo.png")
+        let other = folder.appendingPathComponent("Photo.png")
+        let bytes = Data("original".utf8)
+        try bytes.write(to: source)
+        switch kind {
+        case "hard": try FileManager.default.linkItem(at: source, to: other)
+        case "symbolic": try FileManager.default.createSymbolicLink(at: other, withDestinationURL: source)
+        default: try Data("other".utf8).write(to: other)
+        }
+        let before = try Data(contentsOf: other)
+        let result = await service.execute(
+            FileOperation(kind: .rename(newName: "PHOTO.PNG"), sources: [source]), resolution: resolution
+        )
+        #expect(result.succeeded.isEmpty)
+        #expect(result.failed.first?.reason == .sameNameExists)
+        #expect(try Data(contentsOf: source) == bytes)
+        #expect(try Data(contentsOf: other) == before)
+        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        #expect(names.contains("photo.png") && names.contains("Photo.png"))
+        #expect(!names.contains("PHOTO.PNG"))
+    }
+
+    @Test("Renaming to the identical spelling is a no-op")
+    func identicalRenameKeepsSource() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try makeOps(in: root)
+        let source = folder.appendingPathComponent("a.jpg")
+        let before = try Data(contentsOf: source)
+        let result = await service.execute(
+            FileOperation(kind: .rename(newName: "a.jpg"), sources: [source]), resolution: .replace
+        )
+        #expect(result.failed.isEmpty)
+        #expect(result.succeeded == [source])
+        #expect(try Data(contentsOf: source) == before)
+    }
+
+    @Test("Renaming a missing source reports sourceNotFound")
+    func refusesMissingRenameSource() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("missing.png")
+        let result = await service.execute(
+            FileOperation(kind: .rename(newName: "Missing.png"), sources: [source]), resolution: .abort
+        )
+        #expect(result.succeeded.isEmpty)
+        #expect(result.failed.first?.reason == .sourceNotFound)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+
+    @Test("Case-only folder renames preserve children and store the requested spelling")
+    func renamesFolderCaseOnly() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try makeOps(in: root)
+        let source = folder.appendingPathComponent("CaseAlbum", isDirectory: true)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).contains("CaseAlbum"))
+        let bytes = Data("child contents".utf8)
+        try bytes.write(to: source.appendingPathComponent("child.png"))
+        let result = await service.execute(
+            FileOperation(kind: .rename(newName: "casealbum"), sources: [source]), resolution: .abort
+        )
+        #expect(result.failed.isEmpty)
+        #expect(result.succeeded.map(\.lastPathComponent) == ["casealbum"])
+        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        #expect(names.contains("casealbum"))
+        #expect(!names.contains("CaseAlbum"))
+        #expect(try Data(contentsOf: folder.appendingPathComponent("casealbum/child.png")) == bytes)
+    }
+
+    @Test("A folder cannot be renamed over another file or folder", arguments: [false, true])
+    func refusesFolderRenameCollision(otherIsFolder: Bool) async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try makeOps(in: root)
+        let source = folder.appendingPathComponent("CaseAlbum", isDirectory: true)
+        let other = folder.appendingPathComponent("Taken", isDirectory: otherIsFolder)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try Data("source".utf8).write(to: source.appendingPathComponent("child.png"))
+        if otherIsFolder {
+            try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+            try Data("other".utf8).write(to: other.appendingPathComponent("child.png"))
+        } else {
+            try Data("other".utf8).write(to: other)
+        }
+        let result = await service.execute(
+            FileOperation(kind: .rename(newName: "taken"), sources: [source]), resolution: .replace
+        )
+        #expect(result.succeeded.isEmpty)
+        #expect(result.failed.first?.reason == .sameNameExists)
+        #expect(try Data(contentsOf: source.appendingPathComponent("child.png")) == Data("source".utf8))
+        #expect(try Data(contentsOf: otherIsFolder ? other.appendingPathComponent("child.png") : other)
+            == Data("other".utf8))
     }
 
     @Test("Moving to Trash returns the URL in Trash and removes the item from its original location")
@@ -497,6 +795,83 @@ struct FileOperationServiceTests {
             #expect(result.failed.first?.reason == .intoItself)
             #expect(contents(of: album) == expected)
         }
+    }
+
+    @Test("Creating a folder uses the base name and leaves an empty directory (FR-209)")
+    func createsFolderWithBaseName() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try makeOps(in: root)
+        let before = try Set(FileManager.default.contentsOfDirectory(atPath: folder.path))
+
+        let created = try await service.createFolder(in: folder, baseName: "untitled folder").get()
+
+        #expect(created == folder.appendingPathComponent("untitled folder"))
+        var isDirectory: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: created.path, isDirectory: &isDirectory))
+        #expect(isDirectory.boolValue)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: created.path).isEmpty)
+        let after = try Set(FileManager.default.contentsOfDirectory(atPath: folder.path))
+        #expect(after == before.union(["untitled folder"]))
+    }
+
+    @Test("Creating a folder numbers the name when any entry already uses it (FR-209)")
+    func numbersCreatedFolder() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(
+            at: root.appendingPathComponent("untitled folder"),
+            withIntermediateDirectories: false
+        )
+        try Data("x".utf8).write(to: root.appendingPathComponent("untitled folder 2"))
+        let existing = try Data(contentsOf: root.appendingPathComponent("untitled folder 2"))
+
+        let created = try await service.createFolder(in: root, baseName: "untitled folder").get()
+
+        #expect(created.lastPathComponent == "untitled folder 3")
+        #expect(try Data(contentsOf: root.appendingPathComponent("untitled folder 2")) == existing)
+        #expect(try fileManager.contentsOfDirectory(atPath: root.appendingPathComponent("untitled folder").path).isEmpty)
+    }
+
+    @Test("Creating a folder in a missing destination fails without creating anything (EC-141)")
+    func refusesCreateInMissingFolder() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let missing = root.appendingPathComponent("missing", isDirectory: true)
+        let file = root.appendingPathComponent("file.txt")
+        try Data("x".utf8).write(to: file)
+
+        for destination in [missing, file] {
+            let result = await service.createFolder(in: destination, baseName: "untitled folder")
+            guard case .failure(let reason) = result else {
+                Issue.record("Expected a failure for \(destination.lastPathComponent)")
+                continue
+            }
+            #expect(reason == .destinationNotFound)
+        }
+        #expect(!FileManager.default.fileExists(atPath: missing.path))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path) == ["file.txt"])
+    }
+
+    @Test("Creating a folder in an unwritable destination reports a system failure (EC-141)")
+    func refusesCreateInUnwritableFolder() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let destination = root.appendingPathComponent("locked", isDirectory: true)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: destination.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: destination.path)
+        }
+
+        let result = await service.createFolder(in: destination, baseName: "untitled folder")
+
+        guard case .failure(let reason) = result, case .systemFailure = reason else {
+            Issue.record("Expected a system failure, got \(result)")
+            return
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path).isEmpty)
     }
 
     private func makeTemporaryDirectory() throws -> URL {

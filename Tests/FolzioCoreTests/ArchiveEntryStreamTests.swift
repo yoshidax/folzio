@@ -137,6 +137,37 @@ struct ArchiveEntryStreamTests {
         }
     }
 
+    @Test("Reads fail with an ArchiveError when the zip is truncated after the stream is opened", arguments: names)
+    func truncatedZipThrows(name: String) async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stream = try await openStream(name, in: directory)
+        let handle = try FileHandle(forWritingTo: directory.appendingPathComponent("stream.zip"))
+        try handle.truncate(atOffset: 1000)
+        try handle.close()
+
+        #expect(throws: ArchiveError.self) {
+            try stream.read(offset: 0, maxLength: 4096)
+        }
+    }
+
+    @Test("A truncated stored entry reports dataTruncated")
+    func truncatedStoredEntry() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stream = try await openStream("stored.mp4", in: directory)
+        let handle = try FileHandle(forWritingTo: directory.appendingPathComponent("stream.zip"))
+        try handle.truncate(atOffset: 1000)
+        try handle.close()
+
+        do {
+            _ = try stream.read(offset: 0, maxLength: 4096)
+            Issue.record("Expected an error to be thrown")
+        } catch {
+            #expect(error == .corrupted(.dataTruncated))
+        }
+    }
+
     @Test("MemoryLimits.archiveStreamCacheBytes is 32 MB")
     func cacheLimit() {
         #expect(MemoryLimits.archiveStreamCacheBytes == 32 * 1024 * 1024)

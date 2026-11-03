@@ -76,6 +76,8 @@ final class MainSplitViewController: NSSplitViewController {
     private var didNormalizeInitialPaneState = false
     private var isAppInitiatedFullScreenTransition = false
     private var hiddenListKeyMonitor: Any?
+    /// Monitor for `<` / `>` video seeking while the file list and the preview are both visible (FR-287).
+    private var videoSeekKeyMonitor: Any?
     /// Keyword from the previous search in the same launch. Not persisted (FR-081, R39).
     private var lastSearchKeyword: String?
     private var pendingKindNames: KindNames?
@@ -109,6 +111,19 @@ final class MainSplitViewController: NSSplitViewController {
             isSlideshowActive: slideshowCoordinator.isActive,
             isRestoring: slideshowCoordinator.isRestoring
         )
+    }
+
+    /// Whether presenting the shortcut reference leaves the current editing and presentation state intact.
+    var canShowShortcuts: Bool {
+        guard let window = view.window else { return false }
+        return !fileListViewController.isEditingText
+            && window.attachedSheet == nil
+            && NSApp.modalWindow == nil
+            && !isFullScreenPresentation
+            && !window.styleMask.contains(.fullScreen)
+            && !isAppInitiatedFullScreenTransition
+            && !slideshowCoordinator.isActive
+            && !slideshowCoordinator.isRestoring
     }
 
     /// Shared condition for the menu, toolbar, and start action (FR-114, FR-115).
@@ -192,6 +207,10 @@ final class MainSplitViewController: NSSplitViewController {
                 await treeViewController?.refreshFolders(folders)
             }
         }
+        // After a tree drag or tree Move to Trash, select only the lead row (FR-219).
+        fileOperationCoordinator.onOperationFinished = { [weak treeViewController] sources, removed in
+            treeViewController?.didFinishOperation(sources: sources, removed: removed)
+        }
         // Rebase tree nodes synchronously before rebasing the listing (R64).
         fileOperationCoordinator.onFolderRenamed = { [weak treeViewController] oldURL, newURL in
             treeViewController?.didRenameFolder(from: oldURL, to: newURL)
@@ -199,6 +218,15 @@ final class MainSplitViewController: NSSplitViewController {
         fileListViewController.onRename = { [weak self] url, newName in
             guard let self else { return }
             await self.fileOperationCoordinator.rename(url, to: newName)
+        }
+        // Naming a folder right after New Folder skips the rename confirmation (FR-211).
+        fileListViewController.onRenameNewFolder = { [weak self] url, newName in
+            guard let self else { return }
+            await self.fileOperationCoordinator.rename(url, to: newName, confirms: false)
+        }
+        // New Folder on a favorite names the folder in the file list when it shows the registered folder (FR-210 (3)).
+        treeViewController.onBeginNamingInFileList = { [weak fileListViewController] url in
+            await fileListViewController?.beginNamingNewFolder(url) ?? false
         }
         historyNavigator.presentationHost = self
         coordinator.historyNavigator = historyNavigator
@@ -215,6 +243,7 @@ final class MainSplitViewController: NSSplitViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        installVideoSeekKeyMonitor()
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(displayLanguageDidChange), name: .displayLanguageDidChange, object: nil
@@ -252,11 +281,17 @@ final class MainSplitViewController: NSSplitViewController {
 
         splitView.autosaveName = "MainSplit"
         observeCollapseChanges()
-        fileListViewController.onTogglePlayback = { [weak self] in
-            self?.previewViewController.togglePlayback()
+        fileListViewController.isQuickLookBlocked = { [weak self] in
+            guard let self else { return true }
+            return self.isFullScreenPresentation
+                || self.slideshowCoordinator.isActive
+                || self.slideshowCoordinator.isRestoring
+        }
+        fileListViewController.onQuickLookActiveChange = { [weak self] active in
+            self?.previewViewController.setQuickLookActive(active)
         }
         previewViewController.onDoubleClick = { [weak self] in
-            self?.togglePreviewFullScreen()
+            self?.handlePreviewDoubleClick()
         }
         // Pane visibility changes also arrive here through PreviewViewController.isPaneVisible.
         previewViewController.onZoomAvailabilityChange = { [weak self] in
@@ -770,6 +805,17 @@ final class MainSplitViewController: NSSplitViewController {
         window.toggleFullScreen(nil)
     }
 
+    /// Toggles full screen for a double-click in the preview. Does nothing on an empty preview outside full screen
+    /// (FR-035, EC-149). Controls were already excluded by the preview (EC-150).
+    private func handlePreviewDoubleClick() {
+        guard PreviewDoubleClick.togglesFullScreen(
+            isFullScreen: isFullScreenPresentation,
+            hasMedia: model.preview.hasMedia,
+            isOverControl: false
+        ) else { return }
+        togglePreviewFullScreen()
+    }
+
     func exitPreviewFullScreenIfNeeded() {
         guard let window = view.window else { return }
 
@@ -787,6 +833,39 @@ final class MainSplitViewController: NSSplitViewController {
                 self?.handleHiddenListKey(event) ?? false
             }
             return handled ? nil : event
+        }
+    }
+
+    private func installVideoSeekKeyMonitor() {
+        guard videoSeekKeyMonitor == nil else { return }
+        videoSeekKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            let handled = MainActor.assumeIsolated {
+                self?.handleVideoSeekKey(event) ?? false
+            }
+            return handled ? nil : event
+        }
+    }
+
+    /// Seeks the video by 5 seconds with `<` / `>` when the preview is visible and the file list is not hidden
+    /// (FR-287). The hidden-list views (preview-only, full screen) are handled by `handleHiddenListKey`.
+    private func handleVideoSeekKey(_ event: NSEvent) -> Bool {
+        guard !slideshowCoordinator.isActive,
+              appliedPresentation.isVisible(.preview),
+              !appliedPresentation.navigatesHiddenFileList,
+              let window = view.window,
+              event.windowNumber == window.windowNumber,
+              !(window.firstResponder is NSTextView) else {
+            return false
+        }
+        let disallowed: NSEvent.ModifierFlags = [.command, .option, .control]
+        guard event.modifierFlags.intersection(disallowed).isEmpty else { return false }
+        switch event.charactersIgnoringModifiers {
+        case "<":
+            return previewViewController.seekVideo(by: -5)
+        case ">":
+            return previewViewController.seekVideo(by: 5)
+        default:
+            return false
         }
     }
 
@@ -908,23 +987,28 @@ final class MainSplitViewController: NSSplitViewController {
         previewOnlyItem.target = self
         MainMenu.bind(previewOnlyItem, .menuViewShowPreviewOnly)
         viewMenu.addItem(previewOnlyItem)
+        MenuShortcutApplier.shared.register(fileListOnlyItem, for: .fileListOnly)
+        MenuShortcutApplier.shared.register(previewOnlyItem, for: .previewOnly)
 
         addFocusItem(
             to: viewMenu,
             key: .menuViewFocusTree,
             keyEquivalent: "1",
+            command: .focusTree,
             action: #selector(focusTreePane(_:))
         )
         addFocusItem(
             to: viewMenu,
             key: .menuViewFocusFileList,
             keyEquivalent: "2",
+            command: .focusFileList,
             action: #selector(focusFileListPane(_:))
         )
         addFocusItem(
             to: viewMenu,
             key: .menuViewFocusPreview,
             keyEquivalent: "3",
+            command: .focusPreview,
             action: #selector(focusPreviewPane(_:))
         )
 
@@ -938,12 +1022,14 @@ final class MainSplitViewController: NSSplitViewController {
         favoritesItem.target = self
         MainMenu.bind(favoritesItem, .menuViewGoToFavorites)
         viewMenu.addItem(favoritesItem)
+        MenuShortcutApplier.shared.register(favoritesItem, for: .goToFavorites)
     }
 
     private func addFocusItem(
         to menu: NSMenu,
         key: TextKey,
         keyEquivalent: String,
+        command: ShortcutCommandID,
         action: Selector
     ) {
         let item = NSMenuItem(title: l10n.text(key), action: action, keyEquivalent: keyEquivalent)
@@ -951,6 +1037,7 @@ final class MainSplitViewController: NSSplitViewController {
         item.keyEquivalentModifierMask = [.command, .option]
         item.target = self
         menu.addItem(item)
+        MenuShortcutApplier.shared.register(item, for: command)
     }
 
     @objc private func toggleFileListOnly(_ sender: Any?) {

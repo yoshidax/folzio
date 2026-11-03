@@ -116,6 +116,7 @@
 
 /* Reason a file operation failed */
 "error.operation.sameNameAtDestination" = "Stopped because an item with the same name exists at the destination";
+"error.operation.replacementContainsSource" = "Stopped because the item to replace contains a transfer source";
 
 /* Reason an existing item could not be moved to the Trash. %1$@ is the reason returned by the OS */
 "error.operation.trashExistingFailed" = "Couldn’t move the existing item to the Trash: %1$@";
@@ -171,6 +172,9 @@
 /* Fallback kind name (when the OS does not return a kind name) */
 "kind.zipArchive" = "ZIP archive";
 
+/* About item in the application menu (the first item). Do not translate the app name */
+"menu.app.about" = "About Folzio";
+
 /* Settings item in the application menu (ends with … because it opens a dialog) */
 "menu.app.settings" = "Settings…";
 
@@ -179,6 +183,9 @@
 
 /* Menu bar menu names */
 "menu.file" = "File";
+
+/* File menu items */
+"menu.file.newFolder" = "New Folder";
 
 /* File menu items */
 "menu.file.open" = "Open";
@@ -328,37 +335,67 @@
 "toolbar.panes" = "Panes";
 
 /* Toolbar zoom group name */
-"toolbar.zoomGroup" = "Zoom";
+"toolbar.zoomGroup" = "Preview Size";
 
 /* Toolbar media type group name */
 "toolbar.mediaType" = "Media Type";
 
 /* Toolbar view mode group name */
-"toolbar.viewMode" = "View";
+"toolbar.viewMode" = "File List View";
 
 /* Toolbar and size bar group name */
 "toolbar.size" = "Size";
 
 /* Tooltip and accessibility text for the toolbar and size bar. Include the shortcut */
-"toolbar.thumbnailSize" = "Thumbnail Size (⌃⌘. / ⌃⌘,)";
+"toolbar.thumbnailSize" = "Thumbnail Size (%1$@)";
+
+/* Toolbar group name. Also shown in the customization palette and the text display mode */
+"toolbar.slideshowLabel" = "Slideshow";
+
+/* Toolbar group name. Also shown in the customization palette and the text display mode */
+"toolbar.zipFilesLabel" = "Zip Files";
+
+/* Toolbar group name. Also shown in the customization palette and the text display mode */
+"toolbar.thumbnailSizeLabel" = "Thumbnail Size";
+
+/* Toolbar button tooltip and accessibility text. Includes the shortcut */
+"toolbar.goBackHelp" = "Back (%1$@)";
+
+/* Toolbar button tooltip and accessibility text. Includes the shortcut */
+"toolbar.goForwardHelp" = "Forward (%1$@)";
+
+/* Toolbar button tooltip and accessibility text. Includes the shortcut */
+"toolbar.showFileListOnlyHelp" = "Show File List Only (%1$@)";
+
+/* Toolbar button tooltip and accessibility text. Includes the shortcut */
+"toolbar.showPreviewOnlyHelp" = "Show Preview Only (%1$@)";
+
+/* Toolbar button tooltip and accessibility text. Includes the shortcut */
+"toolbar.showImagesOnlyHelp" = "Show Images Only (%1$@)";
+
+/* Toolbar button tooltip and accessibility text. Includes the shortcut */
+"toolbar.showVideosOnlyHelp" = "Show Videos Only (%1$@)";
+
+/* Toolbar button tooltip and accessibility text. Includes the shortcut */
+"toolbar.zipFilesHelp" = "Show Zip Files (%1$@)";
 
 /* Slideshow tooltip. Includes the shortcut */
-"toolbar.startSlideshowHelp" = "Start Slideshow (⇧⌘S)";
+"toolbar.startSlideshowHelp" = "Start Slideshow (%1$@)";
 
 /* Zoom in tooltip. Includes the shortcut */
-"toolbar.zoomInHelp" = "Zoom In (⌘+)";
+"toolbar.zoomInHelp" = "Zoom In (%1$@)";
 
 /* Zoom to Fit tooltip. Includes the shortcut */
-"toolbar.zoomToFitHelp" = "Zoom to Fit (⌘0)";
+"toolbar.zoomToFitHelp" = "Zoom to Fit (%1$@)";
 
 /* Zoom out tooltip. Includes the shortcut */
-"toolbar.zoomOutHelp" = "Zoom Out (⌘-)";
+"toolbar.zoomOutHelp" = "Zoom Out (%1$@)";
 
 /* View mode options in the toolbar */
-"toolbar.thumbnails" = "Thumbnails";
+"toolbar.thumbnails" = "Thumbnails (%1$@)";
 
 /* View mode options in the toolbar */
-"toolbar.list" = "List";
+"toolbar.list" = "List (%1$@)";
 
 /* Settings window title */
 "settings.window" = "Settings";
@@ -376,7 +413,10 @@
 "settings.fileOperations" = "File Operations";
 
 /* Checkboxes in the Settings window */
-"settings.confirm" = "Confirm before copying, moving to the Trash, or removing from Favorites (renaming, moving, and moving tree folders to the Trash are always confirmed)";
+"settings.confirm" = "Confirm before copying, moving to the Trash, or removing from Favorites";
+
+/* Supplementary note under the confirmation checkbox in the Settings window. Also its accessibility help */
+"settings.confirm.note" = "Renaming, moving, and moving folders in the directory tree to the Trash are always confirmed, regardless of this setting";
 
 /* Section headings in the Settings window */
 "settings.slideshow" = "Slideshow";
@@ -408,6 +448,57 @@
 /* Transition options */
 "settings.transition.zoom" = "Zoom";
 
+/* Settings window tab name for the general settings */
+"settings.tab.general" = "General";
+
+/* Settings window tab name for the shortcut assignments */
+"settings.tab.shortcuts" = "Shortcuts";
+
+/* Accessibility label of the shortcut assignment list in the Settings window */
+"settings.shortcuts.list" = "Shortcuts";
+
+/* Button that starts recording a new shortcut for a command */
+"settings.shortcuts.record" = "Record";
+
+/* Prompt shown in place of the key while a shortcut is being recorded */
+"settings.shortcuts.recording" = "Type shortcut…";
+
+/* Button that returns one command to its default shortcut */
+"settings.shortcuts.reset" = "Reset";
+
+/* Button that returns every command to its default shortcut */
+"settings.shortcuts.resetAll" = "Reset All";
+
+/* Marker for a command whose shortcut differs from the default */
+"settings.shortcuts.changed" = "Changed";
+
+/* Accessibility label of the Record button. The value is the command name */
+"settings.shortcuts.recordFor" = "Record shortcut for %1$@";
+
+/* Accessibility label of the Reset button. The value is the command name */
+"settings.shortcuts.resetFor" = "Reset shortcut for %1$@";
+
+/* Error when the typed shortcut has none of Command, Control, or Option */
+"settings.shortcuts.error.modifier" = "Combine with ⌘, ⌃, or ⌥.";
+
+/* Error when the typed shortcut is reserved or fixed */
+"settings.shortcuts.error.fixed" = "This shortcut can’t be changed.";
+
+/* Error when another command uses the typed shortcut. The value is that command name */
+"settings.shortcuts.error.conflict" = "Already used by “%1$@”.";
+
+/* Error when the default shortcut of a command is used by another command. The value is that command name */
+"settings.shortcuts.error.defaultConflict" = "The default shortcut is used by “%1$@”.";
+
+/* Button that removes the shortcut of a command, so that the command has no key */
+"settings.shortcuts.clear" = "Clear";
+
+/* Accessibility label of the Clear button. The value is the command name */
+"settings.shortcuts.clearFor" = "Clear shortcut for %1$@";
+
+/* Shown in place of the key of a command that has no shortcut */
+"settings.shortcuts.unset" = "Not Set";
+
 /* List view column headings. Also used in the sort menu */
 "list.column.name" = "Name";
 
@@ -416,6 +507,12 @@
 
 /* List view column headings. Also used in the sort menu */
 "list.column.kind" = "Kind";
+
+/* List view column headings. Also used in the sort menu */
+"list.column.size" = "Size";
+
+/* List view column headings. Also used in the sort menu */
+"list.column.modificationDate" = "Date Modified";
 
 /* List view column headings. Also used in the sort menu */
 "list.column.location" = "Location";
@@ -446,6 +543,9 @@
 
 /* Accessibility label for a name edit field in the directory tree */
 "tree.a11y.folderName" = "Folder name";
+
+/* Default name of a folder created with New Folder, before the user renames it. Use Finder's wording */
+"folder.defaultName" = "untitled folder";
 
 /* Search sheet keyword label, placeholder, and accessibility text */
 "search.keyword" = "Keyword";
@@ -576,6 +676,12 @@
 /* Remaining failure count for file operations. %1$@ is the formatted count */
 "dialog.operation.more" = "and %1$@ more";
 
+/* Error shown when folders selected in the directory tree include a folder inside another selected folder, so nothing is moved to the Trash */
+"dialog.treeTrashOverlap.title" = "Can’t move the folders to the Trash";
+
+/* Error shown when folders selected in the directory tree include a folder inside another selected folder, so nothing is moved to the Trash */
+"dialog.treeTrashOverlap.message" = "The selection includes a folder that is inside another selected folder. No folders were moved to the Trash.";
+
 /* Accessibility label for a thumbnail image */
 "a11y.thumbnail" = "Thumbnail";
 
@@ -586,3 +692,311 @@
 
 "preview.scroll.horizontal" = "Horizontal image scroll";
 "preview.scroll.vertical" = "Vertical image scroll";
+
+/* Shortcut Reference */
+
+/* File menu item that opens the shortcut reference */
+"menu.file.shortcuts" = "Keyboard Shortcuts…";
+
+/* File menu item that closes the key window */
+"menu.file.close" = "Close";
+
+/* Shortcut reference window title */
+"shortcuts.window" = "Keyboard Shortcuts";
+
+/* Purpose heading in the shortcut reference */
+"shortcuts.section.panes" = "Panes and View";
+
+/* Purpose heading in the shortcut reference */
+"shortcuts.section.navigation" = "Folders and History";
+
+/* Purpose heading in the shortcut reference */
+"shortcuts.section.files" = "Selection and Files";
+
+/* Purpose heading in the shortcut reference */
+"shortcuts.section.search" = "Search";
+
+/* Purpose heading in the shortcut reference */
+"shortcuts.section.images" = "Images";
+
+/* Purpose heading in the shortcut reference */
+"shortcuts.section.playback" = "Video and Slideshow";
+
+/* Purpose heading in the shortcut reference */
+"shortcuts.section.application" = "App and Windows";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.paneCycle" = "Cycle through visible panes";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.paneCycle" = "Move forward or backward; hidden panes are skipped.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.paneFocus" = "Focus the tree, file list, or preview";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.paneFocus" = "Hidden panes cannot receive focus.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.listOnly" = "Show only the file list, or return to three-pane view";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.listOnly" = "Unavailable while renaming, in full screen, or during a slideshow.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.previewOnly" = "Show only the preview, or return to three-pane view";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.previewOnly" = "Unavailable while renaming, in full screen, or during a slideshow.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.toolbar" = "Show or hide the toolbar";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.listStyle" = "Switch to thumbnail or list view";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.thumbnailSize" = "Make thumbnails larger or smaller";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.thumbnailSize" = "Changes thumbnail size, not image zoom.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.imageFilter" = "Toggle the image filter";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.imageFilter" = "Unavailable while renaming.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.movieFilter" = "Toggle the video filter";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.movieFilter" = "Unavailable while renaming.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.zipVisibility" = "Show or hide zip files";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.zipVisibility" = "Unavailable while renaming; has no effect inside a zip or in search results.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.treeSelect" = "Select the previous or next folder";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.treeSelect" = "When the directory tree has focus.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.treeExpand" = "Expand or select a child; collapse or select the parent";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.treeExpand" = "When the directory tree has focus.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.treeExpandAll" = "Expand or collapse the folder hierarchy";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.treeExpandAll" = "Expands only levels already checked for subfolders; does not scan deeper levels in advance.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.openContainer" = "Show the contents of a folder or zip";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.openContainer" = "In the file list; the parent row goes up one level. Does nothing on media files or while renaming.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.enclosingFolder" = "Go to the enclosing folder";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.enclosingFolder" = "In the file list, except at a tree root, in search results, or while renaming.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.history" = "Go back or forward";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.history" = "Unavailable while renaming, in full screen, or during a slideshow. In search results, Back ends the search and Forward is unavailable.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.favorites" = "Go to Favorites";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.favorites" = "Unavailable when the tree is hidden, while renaming, or in full screen.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.addFavorite" = "Add the selected folder to Favorites";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.addFavorite" = "Unavailable for existing favorites or the heading, while renaming, or when the tree is hidden.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.selection" = "Move the selection";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.selection" = "Use up and down in list view, or all four arrows in thumbnail view.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.extendSelection" = "Extend the selection or select all";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.extendSelection" = "In the file list.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.openDefault" = "Open in the default app";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.openDefault" = "For selected files or folders in the file list; unavailable inside a zip.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.quickLook" = "Preview the selected media with Quick Look";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.quickLook" = "In the file list; press Space again to close. Arrow keys move the selection while Quick Look is open. Unavailable inside a zip. Double-clicking media opens it in its default app.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.rename" = "Rename the selected item";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.rename" = "Return confirms and Esc cancels. Renames a favorite’s display name or a regular folder’s actual name in the tree; unavailable inside a zip in the file list.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.copy" = "Copy selected files";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.copy" = "In the file list; unavailable inside a zip.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.paste" = "Paste or move items here";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.paste" = "Also works on regular tree folders. Unavailable inside a zip or in search results in the file list. While editing, Command-V pastes text.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.copyPath" = "Copy the selected item’s pathname";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.copyPath" = "One item in the focused tree or file list. Unavailable for multiple items, the parent row, zip entries, the Favorites heading, missing favorites, renaming, full screen, or slideshows.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.duplicate" = "Duplicate selected items";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.duplicate" = "In the file list; unavailable inside a zip.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.newFolder" = "Create a new folder";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.newFolder" = "Creates it in the displayed folder (file list) or the selected folder (tree; a favorite’s registered folder). Unavailable inside a zip, in search results, on the Favorites heading or a missing favorite, or while renaming.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.trash" = "Move to Trash or remove from Favorites";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.trash" = "Tree favorites are unregistered without deleting files. Unavailable for tree roots, the heading, or zip entries. Existing confirmation rules apply.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.find" = "Find file and folder names";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.find" = "Unavailable while renaming, in full screen, or in preview-only view.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.searchSubmit" = "Search or cancel in the search sheet";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.searchSubmit" = "An empty keyword cannot start a search. In the folder picker, confirms or cancels only that panel.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.endSearch" = "Leave search results";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.endSearch" = "Esc requires file-list focus; Command-[ works from any pane. Unavailable while renaming or in full screen.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.imageZoom" = "Zoom the image in or out";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.imageZoom" = "For a visible image, from 25%% to 800%%. Unavailable for video, an empty preview, or a hidden preview. Command-= also zooms in.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.imageFit" = "Fit the image to the view";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.imageFit" = "Returns to 100%% fit. Available only when the preview displays an image.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.imageScroll" = "Scroll an image beyond the view edges";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.imageScroll" = "When the preview has focus.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.fullScreen" = "Enter or leave full screen";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.fullScreen" = "Requires a media file; does nothing on a folder, zip, or parent row.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.videoPlay" = "Play or pause the video";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.videoPlay" = "Uses the standard video controls while the video in the preview has the focus. In the file list, Space opens Quick Look instead.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.videoControls" = "Seek or change the volume";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.videoControls" = "When the video has focus in three-pane view; uses standard macOS controls.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.videoSeek" = "Seek backward or forward by 5 seconds";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.videoSeek" = "For video shown in the preview.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.slideshowStart" = "Start a slideshow";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.slideshowStart" = "Requires media in the current list. Unavailable while renaming, displaying a modal, or already running a slideshow.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.slideshowNavigate" = "Choose the previous or next slideshow item";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.slideshowNavigate" = "Left and right apply only to thumbnail view. The parent must be key, with no text editor, sheet, or app modal accepting input.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.slideshowStop" = "End the slideshow and restore the previous panes";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.slideshowStop" = "Also leaves full screen. The parent must be key, with no text editor, sheet, or app modal accepting input.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.settings" = "Open Settings";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.cheatsheet" = "Open or bring forward Keyboard Shortcuts";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.cheatsheet" = "Unavailable after the parent closes, while renaming, displaying a sheet or modal, in full screen, or during a slideshow.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.close" = "Close the key window";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.close" = "Closing the parent also closes its shortcut window.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.quit" = "Quit Folzio";
+
+/* Name of the About window. Not drawn on screen; used as the window title for accessibility */
+"about.window" = "About Folzio";
+
+/* Version line in the About window. %1$@ is the version number, for example 1.0.0 */
+"about.version" = "Version %1$@";
+
+/* Accessibility description of the app icon in the About window */
+"about.icon" = "Folzio app icon";
+
+/* Accessibility help of the repository link in the About window */
+"about.link" = "Opens the Folzio repository in your default web browser";

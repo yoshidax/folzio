@@ -7,7 +7,7 @@ struct NameValidationTests {
     private let file = URL(fileURLWithPath: "/tmp/a.jpg")
     private let existingNames: Set<String> = ["a.jpg", "photo.png"]
 
-    @Test("Rejects empty names, invalid characters, leading dots, and names differing only in case", arguments: [
+    @Test("Rejects invalid names and collisions with supplied sibling names", arguments: [
         "",
         "   ",
         "a/b.jpg",
@@ -20,6 +20,12 @@ struct NameValidationTests {
             Issue.record("\(String(reflecting: name)) was accepted")
             return
         }
+    }
+
+    @Test("Accepts case-only changes when only the source entry is excluded", arguments: ["A.JPG", "a.JPG"])
+    func acceptsCaseOnlySourceRename(name: String) {
+        #expect(validateNewName(name, for: file, existingNames: ["photo.png"]) == .ok)
+        #expect(validateNewName(name, for: file, existingNames: ["A.jpg"]) == .invalid(.duplicate))
     }
 
     @Test("Requests confirmation when the extension changes")
@@ -40,9 +46,17 @@ struct NameValidationTests {
         #expect(validateNewName("B.JPG", for: file, existingNames: existingNames) == .ok)
     }
 
-    @Test("Rejects the target file's own name as a conflict")
+    @Test("Rejects a name present in the supplied sibling set")
     func rejectsSameName() {
         #expect(validateNewName("a.jpg", for: file, existingNames: existingNames) == .invalid(.duplicate))
+    }
+
+    @Test("Accepts a folder's case-only change but rejects another sibling")
+    func validatesCaseOnlyFolderRename() {
+        let folder = URL(fileURLWithPath: "/tmp/Album", isDirectory: true)
+        #expect(validateNewName("album", for: folder, existingNames: [], isDirectory: true) == .ok)
+        #expect(validateNewName("album", for: folder, existingNames: ["ALBUM"], isDirectory: true)
+            == .invalid(.duplicate))
     }
 
     @Test("Folder renaming does not request extension confirmation")
@@ -125,5 +139,29 @@ struct NameValidationTests {
     func handlesNameWithoutExtension() {
         #expect(uniqueName(for: "notes", existingNames: ["notes"]) == "notes 2")
         #expect(uniqueName(for: "notes", existingNames: ["NOTES", "notes 2"]) == "notes 3")
+    }
+    @Test("newFolderName keeps the base name when it is free")
+    func keepsFreeNewFolderName() {
+        #expect(newFolderName(baseName: "untitled folder", existingNames: []) == "untitled folder")
+        #expect(newFolderName(baseName: "untitled folder", existingNames: ["a.jpg", "Album"]) == "untitled folder")
+    }
+
+    @Test("newFolderName numbers from 2 when the base name is taken by any entry")
+    func numbersTakenNewFolderName() {
+        #expect(newFolderName(baseName: "untitled folder", existingNames: ["untitled folder"]) == "untitled folder 2")
+        // A file, a hidden-looking name, and a case-only match all count as taken (FR-209).
+        #expect(newFolderName(baseName: "untitled folder", existingNames: ["Untitled Folder"]) == "untitled folder 2")
+        #expect(
+            newFolderName(
+                baseName: "untitled folder",
+                existingNames: ["untitled folder", "untitled folder 2", ".hidden"]
+            ) == "untitled folder 3"
+        )
+        #expect(newFolderName(baseName: "名称未設定フォルダ", existingNames: ["名称未設定フォルダ"]) == "名称未設定フォルダ 2")
+    }
+
+    @Test("newFolderName does not change uniqueName")
+    func leavesUniqueNameUnchanged() {
+        #expect(uniqueName(for: "untitled folder", existingNames: []) == "untitled folder 2")
     }
 }

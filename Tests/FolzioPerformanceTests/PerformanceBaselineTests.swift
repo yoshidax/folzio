@@ -821,7 +821,8 @@ private func physicalFootprint() -> UInt64 {
     )
     let result = withUnsafeMutablePointer(to: &info) { pointer in
         pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-            task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            // `mach_task_self_` is rejected by the Swift 6.0 concurrency checks and `mach_task_self()` is a C macro.
+            task_info(task_self_trap(), task_flavor_t(TASK_VM_INFO), $0, &count)
         }
     }
     return result == KERN_SUCCESS ? info.phys_footprint : 0
@@ -858,12 +859,12 @@ private func waitForCache(
     let clock = ContinuousClock()
     let deadline = clock.now + timeout
     while clock.now < deadline {
-        if await cache.get(url) != nil {
+        if await cache.containsEntry(for: url) {
             return true
         }
         try? await Task.sleep(for: .milliseconds(10))
     }
-    return await cache.get(url) != nil
+    return await cache.containsEntry(for: url)
 }
 
 /// Searcher that emits results at any time from tests.

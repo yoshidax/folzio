@@ -19,6 +19,11 @@ struct BrowserModelTests {
         try? await Task.sleep(for: .milliseconds(20))
         model.setKindNames(KindNames(folder: "フォルダ", zipArchive: "ZIP アーカイブ"))
         await load.value
+        // If the sleep above overshoots on a busy runner, the language changes after the listing has loaded. The
+        // kind names are then applied asynchronously, so wait for the update instead of reading right after the load.
+        for _ in 0..<100 where model.listing.files.first?.typeDescription != "フォルダ" {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
         #expect(model.listing.files.first?.typeDescription == "フォルダ")
     }
 
@@ -69,6 +74,78 @@ struct BrowserModelTests {
         #expect(model.listing.files.map(\.name) == ["b.jpg"])
         #expect(model.listing.state == .loaded)
         #expect(defaults.string(forKey: "view.lastFolderPath") == second.path)
+    }
+
+    @Test("Overlapping reloads keep the newest success or failure")
+    @MainActor
+    func overlappingReloads() async throws {
+        let folder = URL(fileURLWithPath: "/tmp/reload-\(UUID().uuidString)", isDirectory: true)
+        let old = file("old.jpg", in: folder)
+        let current = file("current.jpg", in: folder)
+
+        for scenario in 0..<3 {
+            let lister = ControlledLister()
+            let (model, defaults, suite) = makeModel(lister: lister, decoder: FakeDecoder())
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let initial = Task { await model.selectFolder(folder) }
+            try await lister.waitForCalls(1)
+            await lister.complete(0, with: .success([old]))
+            await initial.value
+
+            let first = Task { await model.reloadCurrentFolder() }
+            try await lister.waitForCalls(2)
+            let second = Task { await model.reloadCurrentFolder() }
+            try await lister.waitForCalls(3)
+            if scenario == 2 {
+                await lister.complete(2, with: .failure(.accessDenied))
+            } else {
+                await lister.complete(2, with: .success([current]))
+            }
+            await second.value
+            if scenario != 2 {
+                model.select([current.url], focused: current.url)
+            }
+            if scenario == 1 {
+                await lister.complete(1, with: .failure(.notFound))
+            } else {
+                await lister.complete(1, with: .success([old]))
+            }
+            await first.value
+
+            if scenario == 2 {
+                #expect(model.listing.state == .denied)
+                #expect(model.listing.files.isEmpty)
+                #expect(model.selection.focused == nil)
+                if case .empty = model.preview {} else { Issue.record("Expected empty preview") }
+            } else {
+                #expect(model.listing.state == .loaded)
+                #expect(model.listing.files.map(\.url) == [current.url])
+                #expect(model.selection.focused == current.url)
+                #expect(model.selection.selected == [current.url])
+                if case .empty = model.preview { Issue.record("The selected preview was cleared") }
+            }
+        }
+    }
+
+    @Test("A reload supersedes a pending initial folder enumeration")
+    @MainActor
+    func reloadSupersedesInitialLoad() async throws {
+        let folder = URL(fileURLWithPath: "/tmp/reload-initial-\(UUID().uuidString)", isDirectory: true)
+        let old = file("old.jpg", in: folder)
+        let current = file("current.jpg", in: folder)
+        let lister = ControlledLister()
+        let (model, defaults, suite) = makeModel(lister: lister, decoder: FakeDecoder())
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let initial = Task { await model.selectFolder(folder) }
+        try await lister.waitForCalls(1)
+        let reload = Task { await model.reloadCurrentFolder() }
+        try await lister.waitForCalls(2)
+        await lister.complete(1, with: .success([current]))
+        await reload.value
+        await lister.complete(0, with: .success([old]))
+        await initial.value
+        #expect(model.listing.state == .loaded)
+        #expect(model.listing.files.map(\.url) == [current.url])
     }
 
     @Test("Reflects empty-folder and access-denied states")
@@ -450,7 +527,7 @@ struct BrowserModelTests {
         #expect(model.showsZipFiles == false)
         await model.selectFolder(folder)
 
-        #expect(model.listing.files.map(\.name) == ["..", "a.jpg", "c.png", "sub"])
+        #expect(model.listing.files.map(\.name) == ["..", "sub", "a.jpg", "c.png"])
         #expect(model.listing.state == .loaded)
     }
 
@@ -468,7 +545,7 @@ struct BrowserModelTests {
         model.setShowsZipFiles(true)
 
         #expect(model.showsZipFiles == true)
-        #expect(model.listing.files.map(\.name) == ["..", "a.jpg", "b.zip", "c.png", "sub"])
+        #expect(model.listing.files.map(\.name) == ["..", "sub", "a.jpg", "b.zip", "c.png"])
         #expect(model.listing.state == .loaded)
         #expect(await lister.callCount == callsBefore)
         #expect(defaults.object(forKey: "view.showsZipFiles") as? Bool == true)
@@ -489,7 +566,7 @@ struct BrowserModelTests {
         let shown = model.listing.files.map(\.url)
         model.setShowsZipFiles(false)
         #expect(!model.listing.files.contains { $0.kind == .archive })
-        #expect(model.listing.files.map(\.name) == ["..", "a.jpg", "c.png", "sub"])
+        #expect(model.listing.files.map(\.name) == ["..", "sub", "a.jpg", "c.png"])
         #expect(defaults.object(forKey: "view.showsZipFiles") as? Bool == false)
 
         model.setShowsZipFiles(true)
@@ -509,10 +586,10 @@ struct BrowserModelTests {
 
         model.setMediaTypeFilter(MediaTypeFilter(imagesOnly: true))
         model.setShowsZipFiles(true)
-        #expect(model.listing.files.map(\.name) == ["..", "a.jpg", "b.zip", "c.png", "sub"])
+        #expect(model.listing.files.map(\.name) == ["..", "sub", "a.jpg", "b.zip", "c.png"])
 
         model.setShowsZipFiles(false)
-        #expect(model.listing.files.map(\.name) == ["..", "a.jpg", "c.png", "sub"])
+        #expect(model.listing.files.map(\.name) == ["..", "sub", "a.jpg", "c.png"])
     }
 
     @Test("Hiding a focused zip moves focus and preview to a remaining selected item")
@@ -655,12 +732,57 @@ struct BrowserModelTests {
         )
         #expect(restored.showsZipFiles == true)
         await restored.selectFolder(folder)
-        #expect(restored.listing.files.map(\.name) == ["a.jpg", "b.zip", "c.png", "sub"])
+        #expect(restored.listing.files.map(\.name) == ["sub", "a.jpg", "b.zip", "c.png"])
+    }
+
+    @MainActor
+    @Test("Shows and hides list columns and restores them in a new model")
+    func columnVisibilityIsPersisted() {
+        let (model, defaults, suite) = makeModel(lister: FakeLister(responses: [:]), decoder: FakeDecoder())
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(model.visibleColumns == [.creationDate, .kind])
+
+        model.setColumn(.size, visible: true)
+        model.setColumn(.kind, visible: false)
+        #expect(model.visibleColumns == [.creationDate, .size])
+
+        let restored = BrowserModel(
+            kindNames: FixtureKit.kindNames,
+            lister: FakeLister(responses: [:]),
+            decoder: FakeDecoder(),
+            cache: DecodedImageCache(costLimitBytes: 10_000_000),
+            settings: SettingsStore(defaults: defaults)
+        )
+        #expect(restored.visibleColumns == [.creationDate, .size])
+    }
+
+    @MainActor
+    @Test("Hiding the sorted column falls back to name in its last direction, and keeps other sorts")
+    func hidingSortedColumnFallsBackToName() {
+        let (model, defaults, suite) = makeModel(lister: FakeLister(responses: [:]), decoder: FakeDecoder())
+        defer { defaults.removePersistentDomain(forName: suite) }
+        model.setColumn(.size, visible: true)
+
+        // Never sorted by name in descending order: falls back to ascending.
+        model.sortOrder = SortOrder(column: .size, ascending: false)
+        model.setColumn(.size, visible: false)
+        #expect(model.sortOrder == SortOrder(column: .name, ascending: true))
+
+        // Hiding a column that is not the sorted one does not change the sort.
+        model.sortOrder = SortOrder(column: .name, ascending: false)
+        model.sortOrder = SortOrder(column: .creationDate, ascending: true)
+        model.setColumn(.kind, visible: false)
+        #expect(model.sortOrder == SortOrder(column: .creationDate, ascending: true))
+
+        // Uses the direction the name sort last had, and the direction survives a restart.
+        model.setColumn(.creationDate, visible: false)
+        #expect(model.sortOrder == SortOrder(column: .name, ascending: false))
+        #expect(SettingsStore(defaults: defaults).viewSettings.sortOrder == SortOrder(column: .name, ascending: false))
     }
 
     @MainActor
     private func makeModel(
-        lister: FakeLister,
+        lister: any DirectoryListing,
         decoder: FakeDecoder,
         cache: DecodedImageCache = DecodedImageCache(costLimitBytes: 10_000_000)
     ) -> (BrowserModel, UserDefaults, String) {
@@ -684,7 +806,9 @@ struct BrowserModelTests {
             kind: .media(MediaKind(fileExtension: (name as NSString).pathExtension) ?? .jpeg),
             typeDescription: "JPEG イメージ",
             creationDate: nil,
-            fileSize: 0
+            fileSize: 0,
+            // Rows from DirectoryLister always carry a content version; the cache keys images by it (FR-230).
+            contentVersion: FileContentVersion(fileSize: 0, modificationDate: nil, fileIdentifier: 1)
         )
     }
 
@@ -713,10 +837,38 @@ struct BrowserModelTests {
     private func waitForCache(_ cache: DecodedImageCache, _ url: URL) async -> Bool {
         let deadline = ContinuousClock.now + .seconds(2)
         while ContinuousClock.now < deadline {
-            if await cache.get(url) != nil { return true }
+            if await cache.containsEntry(for: url) { return true }
             try? await Task.sleep(for: .milliseconds(10))
         }
         return false
+    }
+}
+
+private actor ControlledLister: DirectoryListing {
+    private var pending: [CheckedContinuation<Result<[MediaFile], ListingError>, Never>] = []
+
+    func mediaFiles(in folder: URL) async throws(ListingError) -> [MediaFile] {
+        let result = await withCheckedContinuation { continuation in
+            pending.append(continuation)
+        }
+        switch result {
+        case let .success(files): return files
+        case let .failure(error): throw error
+        }
+    }
+
+    func subfolders(of folder: URL) async throws(ListingError) -> [URL] { [] }
+
+    func complete(_ index: Int, with result: Result<[MediaFile], ListingError>) {
+        pending[index].resume(returning: result)
+    }
+
+    func waitForCalls(_ count: Int) async throws {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while pending.count < count && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        try #require(pending.count >= count)
     }
 }
 

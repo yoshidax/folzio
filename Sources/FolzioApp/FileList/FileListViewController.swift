@@ -30,12 +30,15 @@ final class FileListViewController: NSViewController {
     private var messageBandHeightConstraint: NSLayoutConstraint?
     private var displayMode: DisplayMode
     private let initialThumbnailSize: Double
+    /// Opens and closes the Quick Look panel for the selected media (FR-247).
+    private let quickLook: QuickLookCoordinator
     private struct HiddenListNavigation {
         let width: Double
     }
 
     private var hiddenListNavigation: HiddenListNavigation?
     private var installedViewMenuItems = false
+    private var shortcutObserver: ShortcutAssignmentObserver?
     private weak var thumbnailMenuItem: NSMenuItem?
     private weak var listMenuItem: NSMenuItem?
     private weak var imagesOnlyMenuItem: NSMenuItem?
@@ -97,7 +100,26 @@ final class FileListViewController: NSViewController {
         self.initialThumbnailSize = ViewSettings.clampThumbnailSize(
             viewSettings.thumbnailSize
         )
+        self.quickLook = QuickLookCoordinator(model: model)
         super.init(nibName: nil, bundle: nil)
+        listModeView.quickLook = quickLook
+        thumbnailModeView.quickLook = quickLook
+        quickLook.prepareToOpen = { [weak self] in
+            self?.scrollFocusedItemIntoView()
+        }
+        quickLook.sourceFrame = { [weak self] url in
+            guard let self else { return .zero }
+            switch self.displayMode {
+            case .list:
+                return self.listModeView.quickLookSourceFrame(for: url)
+            case .thumbnails:
+                return self.thumbnailModeView.quickLookSourceFrame(for: url)
+            }
+        }
+        // Arrow keys typed in the panel move the file list selection, as in Finder (FR-254).
+        quickLook.forwardKey = { [weak self] event in
+            self?.primaryFocusView.keyDown(with: event)
+        }
         thumbnailModeView.thumbnailSize = initialThumbnailSize
         fileContextMenu.install(
             listModeView: listModeView,
@@ -153,9 +175,16 @@ final class FileListViewController: NSViewController {
             : listModeView.focusView
     }
 
-    var onTogglePlayback: (() -> Void)? {
-        get { listModeView.onTogglePlayback }
-        set { listModeView.onTogglePlayback = newValue }
+    /// Whether Space must not open Quick Look: full screen and slideshow (EC-170). Set by the main controller.
+    var isQuickLookBlocked: () -> Bool {
+        get { quickLook.isBlocked }
+        set { quickLook.isBlocked = newValue }
+    }
+
+    /// Called when Quick Look starts or stops showing the file list's items (EC-175).
+    var onQuickLookActiveChange: (Bool) -> Void {
+        get { quickLook.onActiveChange }
+        set { quickLook.onActiveChange = newValue }
     }
 
     var onRename: ((URL, String) async -> Void)? {
@@ -163,6 +192,38 @@ final class FileListViewController: NSViewController {
         set {
             listModeView.onRename = newValue
             thumbnailModeView.onRename = newValue
+        }
+    }
+
+    /// Commits the name of a folder created with New Folder, without the rename confirmation (FR-211).
+    var onRenameNewFolder: ((URL, String) async -> Void)? {
+        get { listModeView.onRenameNewFolder }
+        set {
+            listModeView.onRenameNewFolder = newValue
+            thumbnailModeView.onRenameNewFolder = newValue
+        }
+    }
+
+    /// Whether the last context click hit no row or item, so the context menu targets the displayed folder
+    /// (FR-213, research.md R7).
+    var isContextClickOnBackground: Bool {
+        switch displayMode {
+        case .list:
+            listModeView.isContextClickOnBackground
+        case .thumbnails:
+            thumbnailModeView.isContextClickOnBackground
+        }
+    }
+
+    /// Whether New Folder can create a folder in the displayed folder (FR-212). Unavailable inside a zip, while
+    /// showing search results, and when the displayed folder cannot be read.
+    var canCreateFolderInDisplayedFolder: Bool {
+        guard focusedItemCommands.allowsNewFolder else { return false }
+        switch model.listing.state {
+        case .denied, .failed:
+            return false
+        case .loading, .loaded, .empty, .noMatches:
+            return true
         }
     }
 
@@ -336,6 +397,7 @@ final class FileListViewController: NSViewController {
         NotificationCenter.default.addObserver(
             self, selector: #selector(displayLanguageDidChange), name: .displayLanguageDidChange, object: nil
         )
+        shortcutObserver = ShortcutAssignmentObserver { [weak self] in self?.refreshSizeBarShortcutText() }
         installViewMenuItems()
         refresh()
         observeModel()
@@ -345,11 +407,17 @@ final class FileListViewController: NSViewController {
 
     @objc private func displayLanguageDidChange() {
         sizeLabel.stringValue = l10n.text(.toolbarSize)
-        sizeLabel.toolTip = l10n.text(.toolbarThumbnailSize)
-        sizeSlider.toolTip = l10n.text(.toolbarThumbnailSize)
-        sizeSlider.setAccessibilityLabel(l10n.text(.toolbarThumbnailSize))
-        sizeSlider.setAccessibilityHelp(l10n.text(.toolbarThumbnailSize))
+        refreshSizeBarShortcutText()
         refresh()
+    }
+
+    /// Shows the current thumbnail size keys in the size bar's tooltips and accessibility texts (FR-261).
+    private func refreshSizeBarShortcutText() {
+        let text = ToolbarShortcutText.text(.toolbarThumbnailSize)
+        sizeLabel.toolTip = text
+        sizeSlider.toolTip = text
+        sizeSlider.setAccessibilityLabel(text)
+        sizeSlider.setAccessibilityHelp(text)
     }
 
     override func viewDidAppear() {
@@ -460,11 +528,11 @@ final class FileListViewController: NSViewController {
         label.stringValue = l10n.text(.toolbarSize)
         label.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
         label.textColor = .secondaryLabelColor
-        label.toolTip = l10n.text(.toolbarThumbnailSize)
+        label.toolTip = ToolbarShortcutText.text(.toolbarThumbnailSize)
 
-        sizeSlider.toolTip = l10n.text(.toolbarThumbnailSize)
-        sizeSlider.setAccessibilityLabel(l10n.text(.toolbarThumbnailSize))
-        sizeSlider.setAccessibilityHelp(l10n.text(.toolbarThumbnailSize))
+        sizeSlider.toolTip = ToolbarShortcutText.text(.toolbarThumbnailSize)
+        sizeSlider.setAccessibilityLabel(ToolbarShortcutText.text(.toolbarThumbnailSize))
+        sizeSlider.setAccessibilityHelp(ToolbarShortcutText.text(.toolbarThumbnailSize))
         sizeSlider.minValue = ViewSettings.minimumThumbnailSize
         sizeSlider.maxValue = ViewSettings.maximumThumbnailSize
         sizeSlider.doubleValue = initialThumbnailSize
@@ -740,6 +808,16 @@ final class FileListViewController: NSViewController {
         viewMenu.addItem(zipVisibilityItem)
         zipVisibilityMenuItem = zipVisibilityItem
 
+        // Keys come from the shortcut assignments, not from the literals above (FR-261).
+        let shortcutBindings: [(NSMenuItem, ShortcutCommandID)] = [
+            (thumbnailsItem, .thumbnails), (listItem, .list), (zoomInItem, .largerThumbnails),
+            (zoomOutItem, .smallerThumbnails), (imagesOnlyItem, .imagesOnly), (videosOnlyItem, .videosOnly),
+            (zipVisibilityItem, .zipVisibility),
+        ]
+        for (item, command) in shortcutBindings {
+            MenuShortcutApplier.shared.register(item, for: command)
+        }
+
         updateViewMenuState()
     }
 
@@ -931,6 +1009,61 @@ final class FileListViewController: NSViewController {
         }
     }
 
+    /// New Folder from the background context menu, or ⇧⌘N and File > New Folder while the file list has focus.
+    /// Creates the folder in the displayed folder and starts naming it in its row (FR-208, FR-210).
+    @objc func newFolder(_ sender: Any?) {
+        guard !isEditingText, canCreateFolderInDisplayedFolder else { return }
+        let folder = model.listing.folder
+        Task { @MainActor [weak self] in
+            guard let self, let created = await self.coordinator.createFolder(in: folder) else { return }
+            await self.beginNamingNewFolder(created)
+        }
+    }
+
+    /// Upper bound on waiting for the views to show a new folder's row (about 0.5 seconds).
+    private static let newFolderNamingAttempts = 50
+
+    /// Selects only the new folder's row and starts naming it (FR-210). Does nothing when the file list no longer
+    /// shows the folder's parent as a regular listing, for example after the user moved elsewhere. The tree also
+    /// calls this for a favorite whose registered folder is displayed. Returns whether naming started.
+    @discardableResult
+    func beginNamingNewFolder(_ url: URL) async -> Bool {
+        let path = url.standardizedFileURL.path
+        let parentPath = url.deletingLastPathComponent().standardizedFileURL.path
+        guard model.listing.archive == nil,
+              model.listing.search == nil,
+              model.listing.folder.standardizedFileURL.path == parentPath,
+              let row = model.listing.files.first(where: { $0.url.standardizedFileURL.path == path }) else {
+            return false
+        }
+        model.select([row.url], focused: row.url)
+        // The views apply the reloaded listing in a later Observation task, and applying a changed listing reloads the
+        // rows and cancels any rename in progress. Start editing only after the new row is on screen; otherwise the
+        // field would close right away and leave the default name (FR-210, FR-211).
+        for _ in 0..<Self.newFolderNamingAttempts {
+            await Task.yield()
+            guard !isEditingText else { return false }
+            let started: Bool
+            switch displayMode {
+            case .list:
+                started = listModeView.hasAppliedRow(for: row.url)
+                    && listModeView.beginRenaming(isNewFolder: true)
+            case .thumbnails:
+                started = thumbnailModeView.hasAppliedItem(for: row.url)
+                    && thumbnailModeView.beginRenamingNewFolder(row.url)
+            }
+            if started { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return false
+    }
+
+    /// Show in Finder from the background context menu. Reveals the displayed folder (FR-213).
+    @objc func revealDisplayedFolderInFinder(_ sender: Any?) {
+        guard focusedItemCommands.allowsNewFolder else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([model.listing.folder])
+    }
+
     @objc func moveToTrash(_ sender: Any?) {
         guard selectionItemCommands.allowsFileOperations else { return }
         guard !isEditingText else { return }
@@ -966,8 +1099,16 @@ final class FileListViewController: NSViewController {
         openItem(focused)
     }
 
-    /// Called from double-click and ⌘↓. Does nothing for media rows (Core decides).
+    /// Called from double-click and ⌘↓. Media rows outside a zip open in the default app (FR-251); containers open
+    /// their contents (Core decides).
     func openItem(_ url: URL) {
+        if let file = model.listing.files.first(where: { $0.url == url }),
+           file.kind.opensInDefaultApp(isBrowsingArchive: model.listing.archive != nil) {
+            quickLook.close()
+            // A failure to open is ignored, as with ⌘O (EC-176).
+            _ = NSWorkspace.shared.open(url)
+            return
+        }
         Task { @MainActor [weak self] in
             guard let self else { return }
             await self.model.openItem(url)
@@ -983,6 +1124,16 @@ final class FileListViewController: NSViewController {
             guard let self else { return }
             await self.model.goToEnclosingLevel()
             await self.scrollFocusedItemIntoViewAfterModelUpdate()
+        }
+    }
+
+    /// Scrolls the focused row of the visible display mode into view (EC-173).
+    private func scrollFocusedItemIntoView() {
+        switch displayMode {
+        case .list:
+            listModeView.scrollToFocused()
+        case .thumbnails:
+            thumbnailModeView.scrollToFocused()
         }
     }
 
@@ -1046,6 +1197,13 @@ extension FileListViewController: NSMenuItemValidation {
             || menuItem.action == #selector(toggleVideosOnly(_:))
             || menuItem.action == #selector(toggleShowsZipFiles(_:)) {
             return !isEditingText
+        }
+
+        if menuItem.action == #selector(newFolder(_:)) {
+            return !isEditingText && canCreateFolderInDisplayedFolder
+        }
+        if menuItem.action == #selector(revealDisplayedFolderInFinder(_:)) {
+            return !isEditingText && focusedItemCommands.allowsNewFolder
         }
 
         if menuItem.action == #selector(openFocusedItem(_:)) {

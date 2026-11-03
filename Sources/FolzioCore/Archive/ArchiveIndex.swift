@@ -145,7 +145,13 @@ public struct ArchiveIndex: Sendable {
         }
         self.entries = entries
         self.children = children
-        self.rows = Self.makeRows(archive: archive, entries: entries, children: children, kindNames: kindNames)
+        self.rows = Self.makeRows(
+            archive: archive,
+            version: FileContentVersion(archiveIdentity: identity),
+            entries: entries,
+            children: children,
+            kindNames: kindNames
+        )
     }
 
     public func entry(at path: String) -> ArchiveEntry? {
@@ -167,8 +173,10 @@ public struct ArchiveIndex: Sendable {
 
     // MARK: - Helpers
 
+    /// `version` is the content version of the zip file, shared by all media rows inside it (FR-231).
     private static func makeRows(
         archive: URL,
+        version: FileContentVersion,
         entries: [String: ArchiveEntry],
         children: [String: [String]],
         kindNames: KindNames
@@ -185,7 +193,8 @@ public struct ArchiveIndex: Sendable {
                 if entry.isDirectory {
                     result.append(MediaFile(
                         url: url, name: entry.name, kind: .directory, typeDescription: kindNames.folder,
-                        creationDate: entry.modificationDate, fileSize: 0, kindNameSource: .folder
+                        creationDate: entry.modificationDate, modificationDate: entry.modificationDate,
+                        fileSize: 0, kindNameSource: .folder
                     ))
                 } else if let kind = mediaKind(ofName: entry.name) {
                     let fileExtension = fileExtension(ofName: entry.name)
@@ -200,7 +209,9 @@ public struct ArchiveIndex: Sendable {
                     result.append(MediaFile(
                         url: url, name: entry.name, kind: .media(kind), typeDescription: description,
                         creationDate: entry.modificationDate,
-                        fileSize: Int64(clamping: entry.uncompressedSize)
+                        modificationDate: entry.modificationDate,
+                        fileSize: Int64(clamping: entry.uncompressedSize),
+                        contentVersion: version
                     ))
                 }
             }

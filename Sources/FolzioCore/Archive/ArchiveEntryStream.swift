@@ -48,7 +48,7 @@ public final class ArchiveEntryStream: @unchecked Sendable {
 
     private func readStored(offset: UInt64, count: Int) throws(ArchiveError) -> Data {
         var result = Data(count: count)
-        try result.withUnsafeMutableBytes { (buffer: UnsafeMutableRawBufferPointer) throws(ArchiveError) in
+        try Self.withMutableBytes(of: &result) { (buffer: UnsafeMutableRawBufferPointer) throws(ArchiveError) in
             var done = 0
             while done < count {
                 let piece = min(Self.storedIOChunkSize, count - done)
@@ -94,7 +94,7 @@ public final class ArchiveEntryStream: @unchecked Sendable {
         guard cursor.position == start else { throw .corrupted(.compressedDataTruncated) }
 
         var data = Data(count: size)
-        try data.withUnsafeMutableBytes { (buffer: UnsafeMutableRawBufferPointer) throws(ArchiveError) in
+        try Self.withMutableBytes(of: &data) { (buffer: UnsafeMutableRawBufferPointer) throws(ArchiveError) in
             var done = 0
             while done < size {
                 let slice = UnsafeMutableRawBufferPointer(rebasing: buffer[done...])
@@ -105,6 +105,25 @@ public final class ArchiveEntryStream: @unchecked Sendable {
         }
         store(data, at: index)
         return data
+    }
+
+    /// Calls `body` with the mutable bytes of `data` and rethrows its `ArchiveError`.
+    /// `Data.withUnsafeMutableBytes` does not carry a typed error through to the caller on older toolchains
+    /// (it fails to compile on Swift 6.1 and 6.2), so the error is captured inside the closure and thrown
+    /// after the call returns.
+    private static func withMutableBytes(
+        of data: inout Data,
+        _ body: (UnsafeMutableRawBufferPointer) throws(ArchiveError) -> Void
+    ) throws(ArchiveError) {
+        var failure: ArchiveError?
+        data.withUnsafeMutableBytes { (buffer: UnsafeMutableRawBufferPointer) -> Void in
+            do throws(ArchiveError) {
+                try body(buffer)
+            } catch {
+                failure = error
+            }
+        }
+        if let failure { throw failure }
     }
 
     /// Selects the closest cursor at or before `start`. If none exists, creates one when there is room; otherwise

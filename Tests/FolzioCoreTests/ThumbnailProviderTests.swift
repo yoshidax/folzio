@@ -32,7 +32,8 @@ struct ThumbnailProviderTests {
         let jpeg = await provider.thumbnail(
             for: folder.appendingPathComponent("01-photo.jpg"),
             pointSize: 100,
-            scale: 2
+            scale: 2,
+            version: nil
         )
         #expect(jpeg != nil)
         if let jpeg {
@@ -43,7 +44,8 @@ struct ThumbnailProviderTests {
         let video = await provider.thumbnail(
             for: folder.appendingPathComponent("06-video.mp4"),
             pointSize: 100,
-            scale: 2
+            scale: 2,
+            version: nil
         )
         #expect(video != nil)
         if let video {
@@ -64,7 +66,7 @@ struct ThumbnailProviderTests {
         for name in ["truncated.jpg", "fake.jpg", "empty.mp4"] {
             let url = folder.appendingPathComponent(name)
             #expect(FileManager.default.fileExists(atPath: url.path))
-            let image = await provider.thumbnail(for: url, pointSize: 100, scale: 2)
+            let image = await provider.thumbnail(for: url, pointSize: 100, scale: 2, version: nil)
             #expect(image == nil)
         }
     }
@@ -82,13 +84,13 @@ struct ThumbnailProviderTests {
         let provider = ThumbnailProvider(archiveReader: ZipArchiveReader(kindNames: FixtureKit.kindNames))
         let url = ArchiveURL.entry(archive: zip, path: "pics/big.png")
 
-        let image = await provider.thumbnail(for: url, pointSize: 50, scale: 2)
+        let image = await provider.thumbnail(for: url, pointSize: 50, scale: 2, version: nil)
         let thumbnail = try #require(image)
         #expect(max(thumbnail.width, thumbnail.height) == 128)
         #expect(thumbnail.width > thumbnail.height)
 
         // The second call returns from the cache (the same CGImage).
-        let again = await provider.thumbnail(for: url, pointSize: 50, scale: 2)
+        let again = await provider.thumbnail(for: url, pointSize: 50, scale: 2, version: nil)
         #expect(again === thumbnail)
     }
 
@@ -111,7 +113,8 @@ struct ThumbnailProviderTests {
             let image = await provider.thumbnail(
                 for: ArchiveURL.entry(archive: zip, path: name),
                 pointSize: 50,
-                scale: 2
+                scale: 2,
+                version: nil
             )
             #expect(image == nil, "\(name)")
         }
@@ -134,19 +137,19 @@ struct ThumbnailProviderTests {
         let provider = ThumbnailProvider(archiveReader: reader)
         let url = ArchiveURL.entry(archive: zip, path: "movies/clip.mp4")
 
-        let image = await provider.thumbnail(for: url, pointSize: 50, scale: 2)
+        let image = await provider.thumbnail(for: url, pointSize: 50, scale: 2, version: nil)
         let thumbnail = try #require(image)
         #expect(thumbnail.width > 0)
         #expect(max(thumbnail.width, thumbnail.height) <= 128)
 
-        let again = await provider.thumbnail(for: url, pointSize: 50, scale: 2)
+        let again = await provider.thumbnail(for: url, pointSize: 50, scale: 2, version: nil)
         #expect(again === thumbnail)
     }
 
     @Test("Returns nil for URLs inside a zip when there is no archiveReader")
     func returnsNilForArchiveURLWithoutReader() async {
         let url = ArchiveURL.entry(archive: URL(fileURLWithPath: "/tmp/none.zip"), path: "a.png")
-        let image = await ThumbnailProvider().thumbnail(for: url, pointSize: 50, scale: 2)
+        let image = await ThumbnailProvider().thumbnail(for: url, pointSize: 50, scale: 2, version: nil)
         #expect(image == nil)
     }
 
@@ -162,7 +165,8 @@ struct ThumbnailProviderTests {
                     await provider.thumbnail(
                         for: ArchiveURL.entry(archive: archive, path: "\(index).png"),
                         pointSize: 50,
-                        scale: 2
+                        scale: 2,
+                        version: nil
                     )
                 }
             }
@@ -183,19 +187,69 @@ struct ThumbnailProviderTests {
         let provider = ThumbnailProvider(archiveReader: reader)
         let url = ArchiveURL.entry(archive: URL(fileURLWithPath: "/tmp/none.zip"), path: "a.png")
 
-        let small = Task { await provider.thumbnail(for: url, pointSize: 16, scale: 2) }
-        let large = Task { await provider.thumbnail(for: url, pointSize: 100, scale: 2) }
+        let small = Task { await provider.thumbnail(for: url, pointSize: 16, scale: 2, version: nil) }
+        let large = Task { await provider.thumbnail(for: url, pointSize: 100, scale: 2, version: nil) }
         while reader.snapshot().running < 2 {
             try await Task.sleep(for: .milliseconds(10))
         }
 
-        provider.cancel(for: url, pointSize: 16, scale: 2)
+        provider.cancel(for: url, pointSize: 16, scale: 2, version: nil)
         #expect(await small.value == nil)
         #expect(reader.snapshot().running == 1)
 
-        provider.cancel(for: url, pointSize: 100, scale: 2)
+        provider.cancel(for: url, pointSize: 100, scale: 2, version: nil)
         #expect(await large.value == nil)
         #expect(reader.snapshot().running == 0)
+    }
+
+    // MARK: - Content Versions
+
+    @Test("The cache key distinguishes content versions of the same URL and pixel size (research.md R3)")
+    func cacheKeyIncludesVersion() {
+        let url = URL(fileURLWithPath: "/tmp/a.png")
+        let v1 = FileContentVersion(fileSize: 10, modificationDate: Date(timeIntervalSince1970: 1), fileIdentifier: 7)
+        let v2 = FileContentVersion(fileSize: 10, modificationDate: Date(timeIntervalSince1970: 2), fileIdentifier: 7)
+        let v3 = FileContentVersion(fileSize: 10, modificationDate: Date(timeIntervalSince1970: 1), fileIdentifier: 8)
+
+        let base = ThumbnailProvider.cacheKey(for: url, pixelSize: 128, version: v1)
+        #expect(base == ThumbnailProvider.cacheKey(for: url, pixelSize: 128, version: v1))
+        #expect(base != ThumbnailProvider.cacheKey(for: url, pixelSize: 128, version: v2))
+        #expect(base != ThumbnailProvider.cacheKey(for: url, pixelSize: 128, version: v3))
+        #expect(base != ThumbnailProvider.cacheKey(for: url, pixelSize: 128, version: nil))
+        #expect(base != ThumbnailProvider.cacheKey(for: url, pixelSize: 256, version: v1))
+    }
+
+    @Test("Returns the new image for an entry of a zip replaced at the same path (FR-231)", .timeLimit(.minutes(1)))
+    func returnsNewThumbnailAfterZipReplacement() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let zip = try makeZip(in: root, entries: [
+            ZipFixtureEntry(name: "a.png", content: .bytes(try pngData(in: root, width: 400, height: 200))),
+        ])
+        let reader = ZipArchiveReader(kindNames: FixtureKit.kindNames)
+        let oldIndex = try await reader.open(zip)
+        let provider = ThumbnailProvider(archiveReader: reader)
+        let url = ArchiveURL.entry(archive: zip, path: "a.png")
+        let oldVersion = FileContentVersion(archiveIdentity: oldIndex.identity)
+
+        let oldImage = await provider.thumbnail(for: url, pointSize: 50, scale: 2, version: oldVersion)
+        let old = try #require(oldImage)
+        #expect(old.width > old.height)
+
+        // Replace the zip with a different file at the same path (a new inode), then reopen it as the app does.
+        let replacement = root.appendingPathComponent("replacement.zip")
+        try ZipFixtureWriter.write([
+            ZipFixtureEntry(name: "a.png", content: .bytes(try pngData(in: root, width: 200, height: 400))),
+        ], to: replacement)
+        _ = try FileManager.default.replaceItemAt(zip, withItemAt: replacement)
+        let newIndex = try await reader.open(zip)
+        let newVersion = FileContentVersion(archiveIdentity: newIndex.identity)
+        #expect(newVersion != oldVersion)
+
+        let newImage = await provider.thumbnail(for: url, pointSize: 50, scale: 2, version: newVersion)
+        let new = try #require(newImage)
+        #expect(new.height > new.width)
     }
 
     private func makeZip(in root: URL, entries: [ZipFixtureEntry]) throws -> URL {

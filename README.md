@@ -9,22 +9,31 @@ Browse a folder of photos, animated images, and video clips, then organize files
 
 macOS 15 or later · Apple silicon only · English and Japanese · Works locally without network communication · [MIT License](LICENSE)
 
-![Folzio showing a folder tree, image thumbnails, and a photo preview](docs/images/screenshot.png)
+![Folzio showing a folder tree, image thumbnails, and a photo preview](docs/images/screenshot.jpg)
 
 ## Features
 
 - **Keep the whole folder in view.** Navigate folders, scan thumbnails or a file list, and preview the selected item
   side by side in a three-pane layout. Save frequently used folders as favorites.
 - **View images and videos together.** Browse photos, animated GIFs, WebP images, and videos in the same list,
-  with video autoplay and looping available.
+  with video autoplay and looping available. Press Space for Quick Look, or double-click to open a file in its default app.
 - **Organize while you browse.** Copy, move, duplicate, rename, and trash files and folders with familiar macOS
-  shortcuts and drag and drop.
+  shortcuts and drag and drop. Create folders on the spot, select several folders in the tree to move, copy,
+  or trash them at once, and copy the full path of a file or folder.
 - **Look inside zip archives.** Browse folders and preview images and videos inside zip files.
   Archive contents are read-only; videos play directly from the archive without temporary extraction.
-- **Find files across folders.** Search file and folder names, then preview and organize matching items
-  without leaving the results.
-- **Focus on your media.** Zoom images, switch to preview-only or full-screen viewing, or start a slideshow
-  with adjustable timing and transitions.
+- **Find files across folders.** Search file and folder names (and zip file names while zip files are shown),
+  then preview and organize matching items without leaving the results.
+- **Focus on your media.** Zoom images, switch to preview-only or full-screen viewing (double-click the preview),
+  skip videos back or forward 5 seconds, or start a slideshow with adjustable timing and transitions.
+- **Make it your own.** Rearrange the toolbar, reassign menu shortcuts, and choose which columns the list view shows.
+  Keep the shortcut reference open in its own window while you work.
+
+![List view with the column menu opened from the column header](docs/images/list-view.jpg)
+
+![Quick Look showing the selected image over the file list](docs/images/quick-look.jpg)
+
+![The shortcut reference window next to the main window](docs/images/shortcuts.jpg)
 
 ## Download
 
@@ -50,19 +59,30 @@ Xcode with the Swift 6 toolchain is required to build the app.
 
 To change the interface language, open Settings (⌘,) and choose Language. English is the default.
 If a folder is not accessible, allow Folzio access in System Settings → Privacy & Security → Files and Folders.
+The toolbar is hidden by default; show it with ⇧⌘T, and right-click it to customize the buttons.
 
 ## Useful Shortcuts
 
-| Action | Shortcut |
+The keys below are the defaults. You can change the shortcut of a menu command in Settings (⌘,) → Shortcuts (ショートカット).
+
+| Action | Default shortcut |
 |--------|----------|
+| Open the shortcut reference | ⌘/ |
 | Thumbnail view / list view | ⌘1 / ⌘2 |
+| Show / hide the toolbar | ⇧⌘T |
 | Search file and folder names | ⌘F |
 | Open a folder / go up one level | ⌘↓ / ⌘↑ |
+| Create a new folder | ⇧⌘N |
+| Quick Look the selected media | Space |
 | Zoom an image in / out / fit to view | ⌘+ / ⌘− / ⌘0 |
-| Play / pause a video from the file list | Space |
+| Skip a video back / forward 5 seconds | `<` / `>` |
 | Enter / exit full screen | ⌃⌘F |
 | Start / end a slideshow | ⇧⌘S / Esc |
 | Show / hide zip files | ⌃⌘Z |
+
+Open File → Keyboard Shortcuts… (ショートカット一覧…) for a reference grouped by purpose.
+It opens in a separate window so you can keep using the main window. Close the reference with ⌘W;
+closing its parent also closes the reference.
 
 See the [user guide](docs/usage.md) for more shortcuts, settings, and detailed behavior.
 
@@ -72,11 +92,12 @@ See the [user guide](docs/usage.md) for more shortcuts, settings, and detailed b
   when unsupported, the first frame is displayed.
 - **Videos:** MP4 and MOV. Playback depends on the codecs supported by macOS.
 - **zip archives:** Browse and preview supported media. Archive contents cannot be edited,
-  and name searches do not look inside archives. Zip files are hidden by default; show them with ⌃⌘Z.
+  and name searches do not look inside archives (zip files themselves can be found while shown).
+  Zip files are hidden by default; show them with ⌃⌘Z.
 
 ## Guides
 
-- [User guide](docs/usage.md) — folder navigation, favorites, search, zoom, slideshows, and file operations.
+- [User guide](docs/usage.md) — folder navigation, favorites, search, zoom, slideshows, file operations, and customization.
 - [Development and verification](docs/development.md) — source builds, automated tests, fixtures, and project structure.
 
 ## Project Policy

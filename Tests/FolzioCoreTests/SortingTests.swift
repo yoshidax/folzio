@@ -27,6 +27,64 @@ struct SortingTests {
         #expect(descending.map(\.name) == ["new.jpg", "old.jpg", "none.jpg"])
     }
 
+    @Test("Nil modification dates sort last in both ascending and descending order")
+    func placesMissingModificationDateLast() {
+        let old = Date(timeIntervalSince1970: 100)
+        let new = Date(timeIntervalSince1970: 200)
+        let files = [file("none.jpg"), file("new.jpg", modified: new), file("old.jpg", modified: old)]
+
+        let ascending = sorted(files, by: SortOrder(column: .modificationDate, ascending: true))
+        #expect(ascending.map(\.name) == ["old.jpg", "new.jpg", "none.jpg"])
+
+        let descending = sorted(files, by: SortOrder(column: .modificationDate, ascending: false))
+        #expect(descending.map(\.name) == ["new.jpg", "old.jpg", "none.jpg"])
+    }
+
+    @Test("Folders and files are ordered together by modification date")
+    func mixesFoldersAndFilesByModificationDate() {
+        let files = [
+            file("late.jpg", modified: Date(timeIntervalSince1970: 300)),
+            folder("early", modified: Date(timeIntervalSince1970: 100)),
+            file("middle.jpg", modified: Date(timeIntervalSince1970: 200)),
+        ]
+
+        let ascending = sorted(files, by: SortOrder(column: .modificationDate, ascending: true))
+        #expect(ascending.map(\.name) == ["early", "middle.jpg", "late.jpg"])
+
+        let descending = sorted(files, by: SortOrder(column: .modificationDate, ascending: false))
+        #expect(descending.map(\.name) == ["late.jpg", "middle.jpg", "early"])
+    }
+
+    @Test("Folders count as 0 bytes when sorting by size: first when ascending, last when descending")
+    func sortsFoldersAsZeroBytes() {
+        let files = [
+            file("big.jpg", size: 2_000), folder("b", fileSize: 99_999), file("small.jpg", size: 1_000), folder("a"),
+        ]
+
+        let ascending = sorted(files, by: SortOrder(column: .size, ascending: true))
+        #expect(ascending.map(\.name) == ["a", "b", "small.jpg", "big.jpg"])
+
+        let descending = sorted(files, by: SortOrder(column: .size, ascending: false))
+        #expect(descending.map(\.name) == ["big.jpg", "small.jpg", "a", "b"])
+    }
+
+    @Test("Equal sizes use natural name order as the secondary key")
+    func breaksSizeTiesByName() {
+        let files = [file("b.jpg", size: 5), file("a10.jpg", size: 5), file("a2.jpg", size: 5)]
+        let result = sorted(files, by: SortOrder(column: .size, ascending: false))
+        #expect(result.map(\.name) == ["a2.jpg", "a10.jpg", "b.jpg"])
+    }
+
+    @Test("Only files and zip files have a size to show")
+    func hasFileSizeByKind() {
+        #expect(file("a.jpg").hasFileSize)
+        #expect(!folder("a").hasFileSize)
+        let kinds: [ListItemKind] = [.archive, .directory, .parent]
+        #expect(kinds.map { kind in
+            MediaFile(url: URL(fileURLWithPath: "/tmp/x"), name: "x", kind: kind, typeDescription: "", creationDate: nil, fileSize: 1).hasFileSize
+        } == [true, false, false])
+    }
+
     @Test("Equal values use natural name order as the secondary key")
     func breaksTiesByName() {
         let sameDate = Date(timeIntervalSince1970: 100)
@@ -64,22 +122,53 @@ struct SortingTests {
         }
     }
 
-    @Test("Directories and media interleave in natural name order without distinction")
-    func mixesDirectoriesAndMediaByName() {
+    @Test("Name sort groups zip directories before media in both directions (FR-288)")
+    func groupsDirectoriesBeforeMediaByName() {
         let files = [
             item("c.png", .media(.png)),
             item("..", .parent),
             item("b", .directory),
             item("a.jpg", .media(.jpeg)),
+            item("d", .directory),
         ]
         let ascending = sorted(files, by: SortOrder(column: .name, ascending: true))
-        #expect(ascending.map(\.name) == ["..", "a.jpg", "b", "c.png"])
+        #expect(ascending.map(\.name) == ["..", "b", "d", "a.jpg", "c.png"])
 
         let descending = sorted(files, by: SortOrder(column: .name, ascending: false))
-        #expect(descending.map(\.name) == ["..", "c.png", "b", "a.jpg"])
+        #expect(descending.map(\.name) == ["..", "d", "b", "c.png", "a.jpg"])
     }
 
-    @Test("Folders and files sort together and .. always comes first")
+    @Test("Name sort puts folders first and keeps zip files with the files (FR-288)")
+    func groupsFoldersFirstByName() {
+        let files = [
+            item("c.png", .media(.png)),
+            item("e.zip", .archive),
+            item("b", .folder),
+            item("a.jpg", .media(.jpeg)),
+            item("d", .folder),
+        ]
+        let ascending = sorted(files, by: SortOrder(column: .name, ascending: true))
+        #expect(ascending.map(\.name) == ["b", "d", "a.jpg", "c.png", "e.zip"])
+
+        let descending = sorted(files, by: SortOrder(column: .name, ascending: false))
+        #expect(descending.map(\.name) == ["d", "b", "e.zip", "c.png", "a.jpg"])
+    }
+
+    @Test("Other columns still mix folders and files")
+    func otherColumnsStillMixFolders() {
+        let modified = { (seconds: Double) in Date(timeIntervalSince1970: seconds) }
+        let files = [
+            file("late.jpg", modified: modified(300)),
+            folder("early", modified: modified(100)),
+            file("middle.jpg", modified: modified(200)),
+        ]
+        #expect(
+            sorted(files, by: SortOrder(column: .modificationDate, ascending: true)).map(\.name)
+                == ["early", "middle.jpg", "late.jpg"]
+        )
+    }
+
+    @Test("Folders and files sort with folders first and .. always comes first")
     func mixesFoldersWithFiles() {
         let created = Date(timeIntervalSince1970: 100)
         let files = [
@@ -90,9 +179,9 @@ struct SortingTests {
             item("a.jpg", .media(.jpeg), created: created),
         ]
         let ascending = sorted(files, by: SortOrder(column: .name, ascending: true))
-        #expect(ascending.map(\.name) == ["..", "a.jpg", "b", "c.png", "d.zip"])
+        #expect(ascending.map(\.name) == ["..", "b", "a.jpg", "c.png", "d.zip"])
         let descending = sorted(files, by: SortOrder(column: .name, ascending: false))
-        #expect(descending.map(\.name) == ["..", "d.zip", "c.png", "b", "a.jpg"])
+        #expect(descending.map(\.name) == ["..", "b", "d.zip", "c.png", "a.jpg"])
 
         for column in [SortColumn.name, .creationDate, .kind] {
             for ascending in [true, false] {
@@ -134,7 +223,10 @@ struct SortingTests {
                     // number.
                     url: URL(fileURLWithPath: "\(folder)/\(name)"),
                     name: name,
-                    kind: .media(MediaKind(fileExtension: (name as NSString).pathExtension) ?? .jpeg),
+                    // Roughly one row in four is a folder so the name sort's folder grouping (FR-288) is exercised.
+                    kind: Int.random(in: 0..<4, using: &generator) == 0
+                        ? .folder
+                        : .media(MediaKind(fileExtension: (name as NSString).pathExtension) ?? .jpeg),
                     typeDescription: types.randomElement(using: &generator)!,
                     creationDate: dates.randomElement(using: &generator)!,
                     fileSize: Int64(serial)
@@ -191,6 +283,8 @@ struct SortingTests {
     private func file(
         _ name: String,
         created: Date? = nil,
+        modified: Date? = nil,
+        size: Int64 = 0,
         typeDescription: String = "JPEG イメージ"
     ) -> MediaFile {
         MediaFile(
@@ -199,7 +293,20 @@ struct SortingTests {
             kind: .media(MediaKind(fileExtension: (name as NSString).pathExtension) ?? .jpeg),
             typeDescription: typeDescription,
             creationDate: created,
-            fileSize: 0
+            modificationDate: modified,
+            fileSize: size
+        )
+    }
+
+    private func folder(_ name: String, modified: Date? = nil, fileSize: Int64 = 0) -> MediaFile {
+        MediaFile(
+            url: URL(fileURLWithPath: "/tmp/\(name)"),
+            name: name,
+            kind: .folder,
+            typeDescription: "Folder",
+            creationDate: nil,
+            modificationDate: modified,
+            fileSize: fileSize
         )
     }
 }

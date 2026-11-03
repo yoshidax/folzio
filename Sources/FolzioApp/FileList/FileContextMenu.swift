@@ -1,4 +1,5 @@
 import AppKit
+import FolzioCore
 import FolzioLocalization
 
 @MainActor
@@ -12,6 +13,13 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
     private let openContainerItem = NSMenuItem()
     private let goUpItem = NSMenuItem()
     private let copyPathnameItem = NSMenuItem()
+    private let newFolderItem = NSMenuItem()
+    private let revealFolderItem = NSMenuItem()
+    /// Items for a context click on a row or item, in display order (separators included).
+    private var itemMenuItems: [NSMenuItem] = []
+    /// Items for a context click on the background, targeting the displayed folder (FR-213).
+    private var backgroundMenuItems: [NSMenuItem] = []
+    private var showsBackgroundItems: Bool?
 
     init(host: FileListViewController) {
         self.host = host
@@ -37,6 +45,15 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        // A click on the background shows the displayed folder's menu instead of the selection's (FR-213, R7).
+        let isBackground = host?.isContextClickOnBackground ?? false
+        if showsBackgroundItems != isBackground {
+            showsBackgroundItems = isBackground
+            menu.removeAllItems()
+            for item in isBackground ? backgroundMenuItems : itemMenuItems {
+                menu.addItem(item)
+            }
+        }
         MainMenu.refreshTitles(in: menu)
         let urls = host?.selectedFileURLs ?? []
         if urls.count == 1, let name = urls.first?.lastPathComponent {
@@ -68,6 +85,7 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         openContainerItem.keyEquivalentModifierMask = [.command]
         openContainerItem.target = host
         menu.addItem(openContainerItem)
+        MenuShortcutApplier.shared.register(openContainerItem, for: .showContents)
 
         goUpItem.title = l10n.text(.menuFileEnclosingFolder)
         MainMenu.bind(goUpItem, .menuFileEnclosingFolder)
@@ -77,6 +95,7 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         goUpItem.target = host
         goUpItem.isHidden = true
         menu.addItem(goUpItem)
+        MenuShortcutApplier.shared.register(goUpItem, for: .enclosingFolder)
         menu.addItem(.separator())
 
         addItem(
@@ -90,7 +109,8 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
             key: .menuFileTrash,
             action: #selector(FileListViewController.moveToTrash(_:)),
             keyEquivalent: String(UnicodeScalar(NSBackspaceCharacter)!),
-            modifiers: [.command]
+            modifiers: [.command],
+            command: .trash
         )
         menu.addItem(.separator())
         addItem(
@@ -103,7 +123,8 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
             key: .menuEditDuplicate,
             action: #selector(FileListViewController.duplicate(_:)),
             keyEquivalent: "d",
-            modifiers: [.command]
+            modifiers: [.command],
+            command: .duplicate
         )
         menu.addItem(.separator())
 
@@ -121,6 +142,7 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         copyPathnameItem.keyEquivalentModifierMask = [.command, .option]
         copyPathnameItem.target = host
         menu.addItem(copyPathnameItem)
+        MenuShortcutApplier.shared.register(copyPathnameItem, for: .copyPathname)
 
         pasteItem.title = l10n.text(.menuEditPaste)
         MainMenu.bind(pasteItem, .menuEditPaste)
@@ -137,6 +159,7 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         movePasteItem.keyEquivalentModifierMask = [.command, .option]
         movePasteItem.target = host
         menu.addItem(movePasteItem)
+        MenuShortcutApplier.shared.register(movePasteItem, for: .movePaste)
 
         menu.addItem(.separator())
         addItem(
@@ -145,18 +168,42 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
             keyEquivalent: "",
             modifiers: [.command]
         )
+        itemMenuItems = menu.items
+
+        newFolderItem.title = l10n.text(.menuFileNewFolder)
+        MainMenu.bind(newFolderItem, .menuFileNewFolder)
+        newFolderItem.action = #selector(FileListViewController.newFolder(_:))
+        newFolderItem.keyEquivalent = "N"
+        newFolderItem.keyEquivalentModifierMask = [.command]
+        newFolderItem.target = host
+        MenuShortcutApplier.shared.register(newFolderItem, for: .newFolder)
+
+        revealFolderItem.title = l10n.text(.menuFileRevealInFinder)
+        MainMenu.bind(revealFolderItem, .menuFileRevealInFinder)
+        revealFolderItem.action = #selector(FileListViewController.revealDisplayedFolderInFinder(_:))
+        revealFolderItem.target = host
+
+        // Paste and Move Item Here are shared with the item menu; only one of the two lists is in the menu at a time.
+        backgroundMenuItems = [
+            newFolderItem, .separator(), pasteItem, movePasteItem, .separator(), revealFolderItem,
+        ]
+        showsBackgroundItems = false
     }
 
     private func addItem(
         key: TextKey,
         action: Selector,
         keyEquivalent: String,
-        modifiers: NSEvent.ModifierFlags
+        modifiers: NSEvent.ModifierFlags,
+        command: ShortcutCommandID? = nil
     ) {
         let item = NSMenuItem(title: l10n.text(key), action: action, keyEquivalent: keyEquivalent)
         MainMenu.bind(item, key)
         item.keyEquivalentModifierMask = modifiers
         item.target = host
         menu.addItem(item)
+        if let command {
+            MenuShortcutApplier.shared.register(item, for: command)
+        }
     }
 }

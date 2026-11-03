@@ -56,6 +56,25 @@ enum IconCatalog {
         return symbol(named: name, pointSize: pointSize)
     }
 
+    /// Fixed blue for folder icons (FR-269). Independent of the appearance and the accent color.
+    static let folderBlue = NSColor(srgbRed: 0.18, green: 0.64, blue: 1.00, alpha: 1)
+
+    /// Fixed yellow for zip file icons (FR-270).
+    /// Its HSB brightness is kept close to `folderBlue` so both read as one set.
+    static let archiveYellow = NSColor(srgbRed: 0.96, green: 0.72, blue: 0.00, alpha: 1)
+
+    /// Tint color of a file list row's leading kind icon (FR-269–271).
+    static func tintColor(for kind: ListItemKind) -> NSColor {
+        switch kind.iconTone {
+        case .folderBlue:
+            return folderBlue
+        case .archiveYellow:
+            return archiveYellow
+        case .secondary:
+            return .secondaryLabelColor
+        }
+    }
+
     private static func symbol(named name: String, pointSize: CGFloat) -> NSImage? {
         let configuration = NSImage.SymbolConfiguration(
             pointSize: pointSize,

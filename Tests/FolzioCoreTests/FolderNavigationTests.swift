@@ -98,4 +98,57 @@ struct FolderNavigationTests {
         #expect(shown(["/Users/me/a/x/../b"], showing: "/Users/me/a/b/c") == "/Users/me/a")
         #expect(shown(["/Users/me/a/b"], showing: "/Users/me/a/x/../b") == "/Users/me/a")
     }
+
+    // MARK: - Vanished Displayed Folder (FR-042, EC-13)
+
+    @Test("Detects the folder itself or an ancestor among reported folders by path components")
+    func containsFolderOrAncestor() {
+        let showing = folder("/a/b/c")
+        #expect(FolderNavigation.containsFolderOrAncestor(of: showing, in: [folder("/a/b/c")]))
+        #expect(FolderNavigation.containsFolderOrAncestor(of: showing, in: [folder("/a/b")]))
+        #expect(FolderNavigation.containsFolderOrAncestor(of: showing, in: [folder("/x"), folder("/a")]))
+        #expect(!FolderNavigation.containsFolderOrAncestor(of: showing, in: [folder("/a/b/c/d")]))
+        #expect(!FolderNavigation.containsFolderOrAncestor(of: showing, in: [folder("/a/b2")]))
+        #expect(!FolderNavigation.containsFolderOrAncestor(of: showing, in: []))
+    }
+
+    @Test("Matches /private/var and /var forms of the same folder")
+    func containsFolderOrAncestorNormalizesPrivate() {
+        #expect(FolderNavigation.containsFolderOrAncestor(of: folder("/private/var/t/a/b"), in: [folder("/var/t/a")]))
+        #expect(FolderNavigation.containsFolderOrAncestor(of: folder("/var/t/a/b"), in: [folder("/private/var/t")]))
+    }
+
+    @Test("Returns the nearest existing ancestor and the shallowest vanished folder")
+    func nearestExistingAncestor() throws {
+        let existing: Set<String> = ["/", "/a"]
+        let result = try #require(
+            FolderNavigation.nearestExistingAncestor(of: folder("/a/b/c")) {
+                existing.contains($0.standardizedFileURL.path)
+            }
+        )
+        #expect(result.folder.standardizedFileURL.path == "/a")
+        #expect(result.vanished.standardizedFileURL.path == "/a/b")
+    }
+
+    @Test("Returns the parent when it exists and nil when no ancestor exists")
+    func nearestExistingAncestorBounds() throws {
+        let parent = try #require(FolderNavigation.nearestExistingAncestor(of: folder("/a/b")) { _ in true })
+        #expect(parent.folder.standardizedFileURL.path == "/a")
+        #expect(parent.vanished.standardizedFileURL.path == "/a/b")
+        #expect(FolderNavigation.nearestExistingAncestor(of: folder("/a/b")) { _ in false } == nil)
+    }
+
+    @Test("Keeps a vanished folder inside the deepest root that contains it")
+    func staysInsideRoot() {
+        let roots = [folder("/"), folder("/Users/me"), folder("/Volumes/Ext")]
+        func stays(_ from: String, _ to: String, roots custom: [URL]? = nil) -> Bool {
+            FolderNavigation.staysInsideRoot(from: folder(from), to: folder(to), roots: custom ?? roots)
+        }
+        #expect(stays("/Volumes/Ext/a/b", "/Volumes/Ext"))
+        #expect(stays("/Volumes/Ext/a/b", "/Volumes/Ext/a"))
+        #expect(!stays("/Volumes/Ext/a/b", "/Volumes"))
+        #expect(!stays("/Users/me/a", "/Users"))
+        #expect(stays("/opt/a", "/opt"))
+        #expect(stays("/a/b", "/a", roots: []))
+    }
 }

@@ -19,18 +19,15 @@ final class MainToolbarController: NSObject {
     private let fileList: FileListViewController
     private let panes: MainSplitViewController
     private let settings: SettingsStore
-    private let sizeSlider = NSSlider()
-    private var historyControl: NSSegmentedControl?
-    private var paneLayoutControl: NSSegmentedControl?
-    private var mediaTypeFilterControl: NSSegmentedControl?
-    private var zipVisibilityControl: NSSegmentedControl?
-    private var viewModeControl: NSSegmentedControl?
-    private var sizeItem: NSToolbarItem?
-    private var slideshowButton: NSButton?
-    private var previewZoomControl: NSSegmentedControl?
-    private var previewZoomItem: NSToolbarItem?
     private var visibilityObservation: NSKeyValueObservation?
     private var editingObservers: [NSObjectProtocol] = []
+    private var configurationObservations: [NSKeyValueObservation] = []
+    private var assignmentObserver: ShortcutAssignmentObserver?
+    private var terminationObserver: NSObjectProtocol?
+
+    // The toolbar does not keep references to its controls. The customization palette and the removal and re-adding of
+    // items create new items, so a stored reference would point at a control that is no longer displayed (TAK-23, R-2).
+    // State is always applied to the items currently in `toolbar.items`, found by identifier.
 
     init(fileList: FileListViewController, panes: MainSplitViewController, settings: SettingsStore) {
         self.fileList = fileList
@@ -41,24 +38,16 @@ final class MainToolbarController: NSObject {
         NotificationCenter.default.addObserver(
             self, selector: #selector(displayLanguageDidChange), name: .displayLanguageDidChange, object: nil
         )
+        // The tooltips show the current keys, so an assignment change refreshes them like a language change.
+        assignmentObserver = ShortcutAssignmentObserver { [weak self] in self?.displayLanguageDidChange() }
 
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
-        toolbar.allowsUserCustomization = false
-        toolbar.allowsDisplayModeCustomization = false
+        toolbar.allowsUserCustomization = true
+        toolbar.allowsDisplayModeCustomization = true
+        // The standard autosave writes the configuration but does not apply it at launch (TAK-23, R-3), so the order
+        // and display mode are saved and restored by the app instead.
         toolbar.autosavesConfiguration = false
-
-        sizeSlider.minValue = ViewSettings.minimumThumbnailSize
-        sizeSlider.maxValue = ViewSettings.maximumThumbnailSize
-        sizeSlider.isContinuous = true
-        sizeSlider.controlSize = .small
-        sizeSlider.target = self
-        sizeSlider.action = #selector(thumbnailSizeChanged(_:))
-        sizeSlider.toolTip = l10n.text(.toolbarThumbnailSize)
-        sizeSlider.setAccessibilityLabel(l10n.text(.toolbarThumbnailSize))
-        sizeSlider.setAccessibilityHelp(l10n.text(.toolbarThumbnailSize))
-        sizeSlider.translatesAutoresizingMaskIntoConstraints = false
-        sizeSlider.widthAnchor.constraint(equalToConstant: 120).isActive = true
 
         fileList.onViewStateChange = { [weak self] mode, size in
             self?.apply(displayMode: mode, thumbnailSize: size)
@@ -72,8 +61,9 @@ final class MainToolbarController: NSObject {
             self?.apply(showsZipFiles: shows)
         }
 
-        visibilityObservation = toolbar.observe(\.isVisible, options: [.new]) { [weak self] toolbar, _ in
-            let isVisible = toolbar.isVisible
+        visibilityObservation = toolbar.observe(\.isVisible, options: [.new]) { [weak self] _, change in
+            // Read the new value from the change, because `NSToolbar.isVisible` is main actor-isolated on older SDKs.
+            guard let isVisible = change.newValue else { return }
             MainActor.assumeIsolated {
                 self?.toolbarVisibilityChanged(isVisible)
             }
@@ -92,45 +82,139 @@ final class MainToolbarController: NSObject {
         observeHistoryAvailability()
     }
 
-    @objc private func displayLanguageDidChange() {
-        let entries: [(NSToolbarItem.Identifier, TextKey, NSSegmentedControl?, [TextKey])] = [
-            (Self.historyIdentifier, .toolbarHistory, historyControl, [.menuGoBack, .menuGoForward]),
-            (Self.paneLayoutIdentifier, .toolbarPanes, paneLayoutControl, [.menuViewShowFileListOnly, .menuViewShowPreviewOnly]),
-            (Self.previewZoomIdentifier, .toolbarZoomGroup, previewZoomControl, [.toolbarZoomInHelp, .toolbarZoomToFitHelp, .toolbarZoomOutHelp]),
-            (Self.mediaTypeFilterIdentifier, .toolbarMediaType, mediaTypeFilterControl, [.menuViewShowImagesOnly, .menuViewShowVideosOnly]),
-            (Self.zipVisibilityIdentifier, .menuViewShowZipFiles, zipVisibilityControl, [.menuViewShowZipFiles]),
-            (Self.viewModeIdentifier, .toolbarViewMode, viewModeControl, [.toolbarThumbnails, .toolbarList]),
+    // MARK: - Saving and restoring the customization
+
+    /// Restores the saved item order and display mode, then starts saving further changes.
+    ///
+    /// Call this after the toolbar is attached to the window. The standard autosave is not used, because it did not
+    /// apply the saved order at launch (TAK-23, R-3). Nothing is applied before the user customizes the toolbar for
+    /// the first time, so the default configuration stays in effect.
+    func restoreSavedConfiguration() {
+        if let rawValue = settings.toolbarDisplayModeRawValue,
+           let displayMode = NSToolbar.DisplayMode(rawValue: UInt(rawValue)) {
+            toolbar.displayMode = displayMode
+        }
+        if settings.hasSavedToolbarItemOrder {
+            toolbar.itemIdentifiers = settings.toolbarItemOrder.map { NSToolbarItem.Identifier($0) }
+        }
+        startSavingConfiguration()
+    }
+
+    private func startSavingConfiguration() {
+        // `NSToolbar.itemIdentifiers` is documented as key value observable. The order is also saved when the app
+        // terminates, in case a customization is not reported through the observation.
+        configurationObservations = [
+            toolbar.observe(\.itemIdentifiers, options: []) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.saveConfiguration() }
+            },
+            toolbar.observe(\.displayMode, options: []) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.saveConfiguration() }
+            },
         ]
-        for (identifier, key, control, segmentKeys) in entries {
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.saveConfiguration() }
+        }
+    }
+
+    /// Saves the order and display mode only while they differ from the defaults, so that users who never customized
+    /// the toolbar keep following the default configuration of later versions.
+    private func saveConfiguration() {
+        let order = toolbar.itemIdentifiers.map(\.rawValue)
+        if order == ToolbarLayout.defaultOrder {
+            settings.clearToolbarItemOrder()
+        } else {
+            settings.toolbarItemOrder = order
+        }
+        settings.toolbarDisplayModeRawValue = toolbar.displayMode == .iconOnly ? nil : Int(toolbar.displayMode.rawValue)
+    }
+
+    // MARK: - Finding the items that are displayed
+
+    /// Returns every item with the identifier that is currently in the toolbar.
+    private func items(for identifier: NSToolbarItem.Identifier) -> [NSToolbarItem] {
+        toolbar.items.filter { $0.itemIdentifier == identifier }
+    }
+
+    @objc private func displayLanguageDidChange() {
+        let entries: [(NSToolbarItem.Identifier, TextKey, [TextKey])] = [
+            (Self.historyIdentifier, .toolbarHistory, [.toolbarGoBackHelp, .toolbarGoForwardHelp]),
+            (Self.paneLayoutIdentifier, .toolbarPanes, [.toolbarShowFileListOnlyHelp, .toolbarShowPreviewOnlyHelp]),
+            (Self.previewZoomIdentifier, .toolbarZoomGroup, [.toolbarZoomInHelp, .toolbarZoomToFitHelp, .toolbarZoomOutHelp]),
+            (Self.mediaTypeFilterIdentifier, .toolbarMediaType, [.toolbarShowImagesOnlyHelp, .toolbarShowVideosOnlyHelp]),
+            (Self.zipVisibilityIdentifier, .toolbarZipFilesLabel, [.toolbarZipFilesHelp]),
+            (Self.viewModeIdentifier, .toolbarViewMode, [.toolbarThumbnails, .toolbarList]),
+        ]
+        for (identifier, key, segmentKeys) in entries {
             let label = l10n.text(key)
-            if let item = toolbar.items.first(where: { $0.itemIdentifier == identifier }) {
+            let labels = segmentKeys.map { ToolbarShortcutText.text($0) }
+            for item in items(for: identifier) {
                 item.label = label
                 item.paletteLabel = label
                 item.toolTip = label
+                guard let control = item.view as? NSSegmentedControl else { continue }
+                for (index, text) in labels.enumerated() { control.setToolTip(text, forSegment: index) }
+                control.setAccessibilityLabel(l10n.list(labels))
+                control.setAccessibilityHelp(l10n.list(labels))
             }
-            let labels = segmentKeys.map { l10n.text($0) }
-            for (index, text) in labels.enumerated() { control?.setToolTip(text, forSegment: index) }
-            control?.setAccessibilityLabel(l10n.list(labels))
-            control?.setAccessibilityHelp(l10n.list(labels))
         }
-        slideshowButton?.toolTip = l10n.text(.toolbarStartSlideshowHelp)
-        slideshowButton?.setAccessibilityLabel(l10n.text(.menuViewStartSlideshow))
-        slideshowButton?.setAccessibilityHelp(l10n.text(.toolbarStartSlideshowHelp))
-        if let item = toolbar.items.first(where: { $0.itemIdentifier == Self.slideshowIdentifier }) {
-            item.label = l10n.text(.menuViewStartSlideshow)
+        for item in items(for: Self.slideshowIdentifier) {
+            item.label = l10n.text(.toolbarSlideshowLabel)
             item.paletteLabel = item.label
-            item.toolTip = l10n.text(.toolbarStartSlideshowHelp)
+            item.toolTip = ToolbarShortcutText.text(.toolbarStartSlideshowHelp)
+            if let button = item.view as? NSButton {
+                button.toolTip = ToolbarShortcutText.text(.toolbarStartSlideshowHelp)
+                button.setAccessibilityLabel(l10n.text(.menuViewStartSlideshow))
+                button.setAccessibilityHelp(ToolbarShortcutText.text(.toolbarStartSlideshowHelp))
+            }
         }
-        sizeSlider.toolTip = l10n.text(.toolbarThumbnailSize)
-        sizeSlider.setAccessibilityLabel(l10n.text(.toolbarThumbnailSize))
-        sizeSlider.setAccessibilityHelp(l10n.text(.toolbarThumbnailSize))
-        sizeItem?.label = l10n.text(.toolbarSize)
-        sizeItem?.paletteLabel = l10n.text(.toolbarSize)
-        sizeItem?.toolTip = l10n.text(.toolbarThumbnailSize)
+        for item in items(for: Self.thumbnailSizeIdentifier) {
+            item.label = l10n.text(.toolbarThumbnailSizeLabel)
+            item.paletteLabel = item.label
+            item.toolTip = ToolbarShortcutText.text(.toolbarThumbnailSize)
+            if let slider = item.view as? NSSlider {
+                slider.toolTip = ToolbarShortcutText.text(.toolbarThumbnailSize)
+                slider.setAccessibilityLabel(ToolbarShortcutText.text(.toolbarThumbnailSize))
+                slider.setAccessibilityHelp(ToolbarShortcutText.text(.toolbarThumbnailSize))
+            }
+        }
+    }
+
+    // MARK: - Applying state
+
+    /// Applies the current app state to a single item, such as one that was just created or added to the toolbar.
+    private func applyState(to item: NSToolbarItem) {
+        switch item.itemIdentifier {
+        case Self.historyIdentifier:
+            applyHistoryAvailability(to: item)
+        case Self.paneLayoutIdentifier:
+            applyPaneLayout(panes.paneLayout, to: item)
+        case Self.slideshowIdentifier:
+            (item.view as? NSButton)?.isEnabled = panes.canStartSlideshow
+        case Self.previewZoomIdentifier:
+            applyZoomAvailability(to: item)
+        case Self.mediaTypeFilterIdentifier:
+            applyMediaTypeFilter(fileList.currentMediaTypeFilter, to: item)
+        case Self.zipVisibilityIdentifier:
+            applyShowsZipFiles(fileList.currentShowsZipFiles, to: item)
+        case Self.viewModeIdentifier, Self.thumbnailSizeIdentifier:
+            applyDisplayState(
+                displayMode: fileList.currentDisplayMode,
+                thumbnailSize: fileList.currentThumbnailSize,
+                to: item
+            )
+        default:
+            break
+        }
     }
 
     private func updateSlideshowAvailability() {
-        slideshowButton?.isEnabled = panes.canStartSlideshow
+        for item in items(for: Self.slideshowIdentifier) {
+            (item.view as? NSButton)?.isEnabled = panes.canStartSlideshow
+        }
         applyHistoryAvailability()
         toolbar.validateVisibleItems()
     }
@@ -138,12 +222,19 @@ final class MainToolbarController: NSObject {
     /// Enables or disables Zoom In, Zoom Out, and Zoom to Fit from image display, pane visibility, and zoom limits
     /// (FR-134, FR-136).
     private func applyZoomAvailability() {
+        for item in items(for: Self.previewZoomIdentifier) {
+            applyZoomAvailability(to: item)
+        }
+    }
+
+    private func applyZoomAvailability(to item: NSToolbarItem) {
         let availability = panes.zoomAvailability
-        previewZoomItem?.isEnabled = availability.isAvailable
-        previewZoomControl?.isEnabled = availability.isAvailable
-        previewZoomControl?.setEnabled(availability.canZoomIn, forSegment: 0)
-        previewZoomControl?.setEnabled(availability.canFit, forSegment: 1)
-        previewZoomControl?.setEnabled(availability.canZoomOut, forSegment: 2)
+        item.isEnabled = availability.isAvailable
+        guard let control = item.view as? NSSegmentedControl else { return }
+        control.isEnabled = availability.isAvailable
+        control.setEnabled(availability.canZoomIn, forSegment: 0)
+        control.setEnabled(availability.canFit, forSegment: 1)
+        control.setEnabled(availability.canZoomOut, forSegment: 2)
     }
 
     private func observeEditingAvailability() {
@@ -165,9 +256,16 @@ final class MainToolbarController: NSObject {
 
     /// Enables or disables Back and Forward from history and pane state (FR-112).
     func applyHistoryAvailability() {
+        for item in items(for: Self.historyIdentifier) {
+            applyHistoryAvailability(to: item)
+        }
+    }
+
+    private func applyHistoryAvailability(to item: NSToolbarItem) {
+        guard let control = item.view as? NSSegmentedControl else { return }
         let canNavigate = panes.paneCommands.canNavigateHistory
-        historyControl?.setEnabled(canNavigate && panes.historyNavigator.canGoBack, forSegment: 0)
-        historyControl?.setEnabled(canNavigate && panes.historyNavigator.canGoForward, forSegment: 1)
+        control.setEnabled(canNavigate && panes.historyNavigator.canGoBack, forSegment: 0)
+        control.setEnabled(canNavigate && panes.historyNavigator.canGoForward, forSegment: 1)
     }
 
     private func observeHistoryAvailability() {
@@ -184,41 +282,70 @@ final class MainToolbarController: NSObject {
     }
 
     func apply(paneLayout: PaneLayout) {
-        paneLayoutControl?.setSelected(paneLayout.soloPane == .fileList, forSegment: 0)
-        paneLayoutControl?.setSelected(paneLayout.soloPane == .preview, forSegment: 1)
-        paneLayoutControl?.isEnabled = panes.paneCommands.canChangeLayout
+        for item in items(for: Self.paneLayoutIdentifier) {
+            applyPaneLayout(paneLayout, to: item)
+        }
         applyHistoryAvailability()
     }
 
-    func apply(displayMode: DisplayMode, thumbnailSize: Double) {
-        viewModeControl?.selectedSegment = displayMode == .thumbnails ? 0 : 1
-        if abs(sizeSlider.doubleValue - thumbnailSize) > 0.01 {
-            sizeSlider.doubleValue = thumbnailSize
-        }
+    private func applyPaneLayout(_ paneLayout: PaneLayout, to item: NSToolbarItem) {
+        guard let control = item.view as? NSSegmentedControl else { return }
+        control.setSelected(paneLayout.soloPane == .fileList, forSegment: 0)
+        control.setSelected(paneLayout.soloPane == .preview, forSegment: 1)
+        control.isEnabled = panes.paneCommands.canChangeLayout
+    }
 
-        let sliderEnabled = FileListChrome(
-            displayMode: displayMode,
-            toolbarShown: toolbar.isVisible
-        ).toolbarSliderEnabled
-        sizeSlider.isEnabled = sliderEnabled
-        sizeItem?.isEnabled = sliderEnabled
+    func apply(displayMode: DisplayMode, thumbnailSize: Double) {
+        for identifier in [Self.viewModeIdentifier, Self.thumbnailSizeIdentifier] {
+            for item in items(for: identifier) {
+                applyDisplayState(displayMode: displayMode, thumbnailSize: thumbnailSize, to: item)
+            }
+        }
+    }
+
+    private func applyDisplayState(displayMode: DisplayMode, thumbnailSize: Double, to item: NSToolbarItem) {
+        switch item.itemIdentifier {
+        case Self.viewModeIdentifier:
+            (item.view as? NSSegmentedControl)?.selectedSegment = displayMode == .thumbnails ? 0 : 1
+        case Self.thumbnailSizeIdentifier:
+            let sliderEnabled = FileListChrome(
+                displayMode: displayMode,
+                toolbarShown: toolbar.isVisible
+            ).toolbarSliderEnabled
+            if let slider = item.view as? NSSlider {
+                if abs(slider.doubleValue - thumbnailSize) > 0.01 {
+                    slider.doubleValue = thumbnailSize
+                }
+                slider.isEnabled = sliderEnabled
+            }
+            item.isEnabled = sliderEnabled
+        default:
+            break
+        }
     }
 
     func apply(mediaTypeFilter: MediaTypeFilter) {
-        mediaTypeFilterControl?.setSelected(mediaTypeFilter.imagesOnly, forSegment: 0)
-        mediaTypeFilterControl?.setSelected(mediaTypeFilter.videosOnly, forSegment: 1)
+        for item in items(for: Self.mediaTypeFilterIdentifier) {
+            applyMediaTypeFilter(mediaTypeFilter, to: item)
+        }
+    }
+
+    private func applyMediaTypeFilter(_ filter: MediaTypeFilter, to item: NSToolbarItem) {
+        guard let control = item.view as? NSSegmentedControl else { return }
+        control.setSelected(filter.imagesOnly, forSegment: 0)
+        control.setSelected(filter.videosOnly, forSegment: 1)
     }
 
     func apply(showsZipFiles: Bool) {
-        zipVisibilityControl?.setSelected(showsZipFiles, forSegment: 0)
-        zipVisibilityControl?.isEnabled = !fileList.isEditingText
+        for item in items(for: Self.zipVisibilityIdentifier) {
+            applyShowsZipFiles(showsZipFiles, to: item)
+        }
     }
 
-    private func applyCurrentState() {
-        apply(
-            displayMode: fileList.currentDisplayMode,
-            thumbnailSize: fileList.currentThumbnailSize
-        )
+    private func applyShowsZipFiles(_ shows: Bool, to item: NSToolbarItem) {
+        guard let control = item.view as? NSSegmentedControl else { return }
+        control.setSelected(shows, forSegment: 0)
+        control.isEnabled = !fileList.isEditingText
     }
 
     private func toolbarVisibilityChanged(_ isVisible: Bool) {
@@ -279,6 +406,24 @@ final class MainToolbarController: NSObject {
         fileList.applyThumbnailSize(sender.doubleValue)
     }
 
+    /// Creates a thumbnail size slider. Every toolbar item gets its own slider, because a view can have only one
+    /// superview and the palette creates its own items.
+    private func makeSizeSlider() -> NSSlider {
+        let slider = NSSlider()
+        slider.minValue = ViewSettings.minimumThumbnailSize
+        slider.maxValue = ViewSettings.maximumThumbnailSize
+        slider.isContinuous = true
+        slider.controlSize = .small
+        slider.target = self
+        slider.action = #selector(thumbnailSizeChanged(_:))
+        slider.toolTip = ToolbarShortcutText.text(.toolbarThumbnailSize)
+        slider.setAccessibilityLabel(ToolbarShortcutText.text(.toolbarThumbnailSize))
+        slider.setAccessibilityHelp(ToolbarShortcutText.text(.toolbarThumbnailSize))
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        slider.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        return slider
+    }
+
     /// Lays out the three button groups with the same appearance and width (FR-045, 051, 056, 089).
     private func makeSegmentedControl(
         items: [(symbol: String, label: String)],
@@ -333,7 +478,14 @@ extension MainToolbarController: NSToolbarDelegate {
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.historyIdentifier, Self.paneLayoutIdentifier, Self.slideshowIdentifier, Self.previewZoomIdentifier, Self.mediaTypeFilterIdentifier, Self.zipVisibilityIdentifier, Self.viewModeIdentifier, Self.thumbnailSizeIdentifier, .flexibleSpace]
+        [Self.historyIdentifier, Self.paneLayoutIdentifier, Self.slideshowIdentifier, Self.previewZoomIdentifier, Self.mediaTypeFilterIdentifier, Self.zipVisibilityIdentifier, Self.viewModeIdentifier, Self.thumbnailSizeIdentifier, .space, .flexibleSpace]
+    }
+
+    /// Applies the current state to an item as it enters the toolbar. At this point the item is not yet in
+    /// `toolbar.items`, so the state is applied to the item in the notification.
+    func toolbarWillAddItem(_ notification: Notification) {
+        guard let item = notification.userInfo?["item"] as? NSToolbarItem else { return }
+        applyState(to: item)
     }
 
     func toolbar(
@@ -341,45 +493,49 @@ extension MainToolbarController: NSToolbarDelegate {
         itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
+        // Every call returns a new item with its own controls. `flag` is false for the items shown in the customization
+        // palette. Only the items that enter the toolbar get the current state.
+        let item = makeItem(for: itemIdentifier)
+        if flag, let item {
+            applyState(to: item)
+        }
+        return item
+    }
+
+    private func makeItem(for itemIdentifier: NSToolbarItem.Identifier) -> NSToolbarItem? {
         switch itemIdentifier {
         case Self.historyIdentifier:
             guard let control = makeSegmentedControl(
                 items: [
-                    ("chevron.left", l10n.text(.menuGoBack)),
-                    ("chevron.right", l10n.text(.menuGoForward)),
+                    ("chevron.left", ToolbarShortcutText.text(.toolbarGoBackHelp)),
+                    ("chevron.right", ToolbarShortcutText.text(.toolbarGoForwardHelp)),
                 ],
                 trackingMode: .momentary,
                 action: #selector(historySelected(_:))
             ) else {
                 return nil
             }
-            historyControl = control
-            let item = makeGroupItem(
+            return makeGroupItem(
                 identifier: itemIdentifier,
                 label: l10n.text(.toolbarHistory),
                 control: control
             )
-            applyHistoryAvailability()
-            return item
         case Self.paneLayoutIdentifier:
             guard let control = makeSegmentedControl(
                 items: [
-                    ("list.bullet.rectangle", l10n.text(.menuViewShowFileListOnly)),
-                    ("sidebar.right", l10n.text(.menuViewShowPreviewOnly)),
+                    ("list.bullet.rectangle", ToolbarShortcutText.text(.toolbarShowFileListOnlyHelp)),
+                    ("sidebar.right", ToolbarShortcutText.text(.toolbarShowPreviewOnlyHelp)),
                 ],
                 trackingMode: .selectAny,
                 action: #selector(paneLayoutSelected(_:))
             ) else {
                 return nil
             }
-            paneLayoutControl = control
-            let item = makeGroupItem(
+            return makeGroupItem(
                 identifier: itemIdentifier,
                 label: l10n.text(.toolbarPanes),
                 control: control
             )
-            apply(paneLayout: panes.paneLayout)
-            return item
         case Self.slideshowIdentifier:
             let image = IconCatalog.slideshowIcon() ?? NSImage()
             let button = NSButton(
@@ -391,20 +547,18 @@ extension MainToolbarController: NSToolbarDelegate {
             button.controlSize = .regular
             button.isBordered = true
             button.imagePosition = .imageOnly
-            button.toolTip = l10n.text(.toolbarStartSlideshowHelp)
+            button.toolTip = ToolbarShortcutText.text(.toolbarStartSlideshowHelp)
             button.setAccessibilityLabel(l10n.text(.menuViewStartSlideshow))
-            button.setAccessibilityHelp(l10n.text(.toolbarStartSlideshowHelp))
-            slideshowButton = button
+            button.setAccessibilityHelp(ToolbarShortcutText.text(.toolbarStartSlideshowHelp))
 
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-            item.label = l10n.text(.menuViewStartSlideshow)
-            item.paletteLabel = l10n.text(.menuViewStartSlideshow)
-            item.toolTip = l10n.text(.toolbarStartSlideshowHelp)
+            item.label = l10n.text(.toolbarSlideshowLabel)
+            item.paletteLabel = l10n.text(.toolbarSlideshowLabel)
+            item.toolTip = ToolbarShortcutText.text(.toolbarStartSlideshowHelp)
             item.view = button
             item.target = panes
             item.action = #selector(MainSplitViewController.startSlideshow(_:))
             item.autovalidates = true
-            updateSlideshowAvailability()
             return item
         case Self.previewZoomIdentifier:
             // A momentary action that does not keep a selected state. Do not show a pressed middle button even at
@@ -420,85 +574,71 @@ extension MainToolbarController: NSToolbarDelegate {
             ) else {
                 return nil
             }
-            control.setToolTip(l10n.text(.toolbarZoomInHelp), forSegment: 0)
-            control.setToolTip(l10n.text(.toolbarZoomToFitHelp), forSegment: 1)
-            control.setToolTip(l10n.text(.toolbarZoomOutHelp), forSegment: 2)
+            control.setToolTip(ToolbarShortcutText.text(.toolbarZoomInHelp), forSegment: 0)
+            control.setToolTip(ToolbarShortcutText.text(.toolbarZoomToFitHelp), forSegment: 1)
+            control.setToolTip(ToolbarShortcutText.text(.toolbarZoomOutHelp), forSegment: 2)
             control.setAccessibilityHelp(l10n.list([
-                l10n.text(.toolbarZoomInHelp), l10n.text(.toolbarZoomToFitHelp), l10n.text(.toolbarZoomOutHelp),
+                ToolbarShortcutText.text(.toolbarZoomInHelp), ToolbarShortcutText.text(.toolbarZoomToFitHelp), ToolbarShortcutText.text(.toolbarZoomOutHelp),
             ]))
-            previewZoomControl = control
-            let item = makeGroupItem(
+            return makeGroupItem(
                 identifier: itemIdentifier,
                 label: l10n.text(.toolbarZoomGroup),
                 control: control
             )
-            previewZoomItem = item
-            applyZoomAvailability()
-            return item
         case Self.mediaTypeFilterIdentifier:
             guard let control = makeSegmentedControl(
                 items: [
-                    ("photo", l10n.text(.menuViewShowImagesOnly)),
-                    ("film", l10n.text(.menuViewShowVideosOnly)),
+                    ("photo", ToolbarShortcutText.text(.toolbarShowImagesOnlyHelp)),
+                    ("film", ToolbarShortcutText.text(.toolbarShowVideosOnlyHelp)),
                 ],
                 trackingMode: .selectAny,
                 action: #selector(mediaTypeFilterSelected(_:))
             ) else {
                 return nil
             }
-            mediaTypeFilterControl = control
-            let item = makeGroupItem(
+            return makeGroupItem(
                 identifier: itemIdentifier,
                 label: l10n.text(.toolbarMediaType),
                 control: control
             )
-            apply(mediaTypeFilter: fileList.currentMediaTypeFilter)
-            return item
         case Self.zipVisibilityIdentifier:
             guard let control = makeSegmentedControl(
                 items: [
-                    ("doc.zipper", l10n.text(.menuViewShowZipFiles)),
+                    ("doc.zipper", ToolbarShortcutText.text(.toolbarZipFilesHelp)),
                 ],
                 trackingMode: .selectAny,
                 action: #selector(zipVisibilitySelected(_:))
             ) else {
                 return nil
             }
-            zipVisibilityControl = control
-            let item = makeGroupItem(
+            return makeGroupItem(
                 identifier: itemIdentifier,
-                label: l10n.text(.menuViewShowZipFiles),
+                label: l10n.text(.toolbarZipFilesLabel),
                 control: control
             )
-            apply(showsZipFiles: fileList.currentShowsZipFiles)
-            return item
         case Self.viewModeIdentifier:
             guard let control = makeSegmentedControl(
                 items: [
-                    ("square.grid.2x2", l10n.text(.toolbarThumbnails)),
-                    ("list.bullet", l10n.text(.toolbarList)),
+                    ("square.grid.2x2", ToolbarShortcutText.text(.toolbarThumbnails)),
+                    ("list.bullet", ToolbarShortcutText.text(.toolbarList)),
                 ],
                 trackingMode: .selectOne,
                 action: #selector(viewModeSelected(_:))
             ) else {
                 return nil
             }
-            viewModeControl = control
-            let item = makeGroupItem(
+            return makeGroupItem(
                 identifier: itemIdentifier,
                 label: l10n.text(.toolbarViewMode),
                 control: control
             )
-            applyCurrentState()
-            return item
         case Self.thumbnailSizeIdentifier:
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-            item.label = l10n.text(.toolbarSize)
-            item.toolTip = l10n.text(.toolbarThumbnailSize)
-            item.view = sizeSlider
+            item.label = l10n.text(.toolbarThumbnailSizeLabel)
+            item.paletteLabel = item.label
+            item.toolTip = ToolbarShortcutText.text(.toolbarThumbnailSize)
+            item.view = makeSizeSlider()
             item.autovalidates = false
-            sizeItem = item
-            applyCurrentState()
             return item
         default:
             return nil
@@ -510,23 +650,23 @@ extension MainToolbarController: NSToolbarItemValidation {
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
         case Self.historyIdentifier:
-            applyHistoryAvailability()
+            applyHistoryAvailability(to: item)
             return panes.paneCommands.canNavigateHistory
                 && (panes.historyNavigator.canGoBack || panes.historyNavigator.canGoForward)
         case Self.paneLayoutIdentifier:
             let enabled = panes.paneCommands.canChangeLayout
-            paneLayoutControl?.isEnabled = enabled
+            (item.view as? NSSegmentedControl)?.isEnabled = enabled
             return enabled
         case Self.slideshowIdentifier:
             let enabled = panes.canStartSlideshow
-            slideshowButton?.isEnabled = enabled
+            (item.view as? NSButton)?.isEnabled = enabled
             return enabled
         case Self.previewZoomIdentifier:
-            applyZoomAvailability()
+            applyZoomAvailability(to: item)
             return panes.zoomAvailability.isAvailable
         case Self.zipVisibilityIdentifier:
             let enabled = !fileList.isEditingText
-            zipVisibilityControl?.isEnabled = enabled
+            (item.view as? NSSegmentedControl)?.isEnabled = enabled
             return enabled
         default:
             return true

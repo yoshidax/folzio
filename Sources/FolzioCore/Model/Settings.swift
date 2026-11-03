@@ -11,6 +11,11 @@ public struct ViewSettings: Sendable, Equatable {
     public var showsToolbar: Bool
     /// Whether zip file rows appear in the file list (FR-095). Hidden by default.
     public var showsZipFiles: Bool
+    /// Columns of the list view that are shown besides the name column (TAK-47). Date Created and Kind by default.
+    public var visibleColumns: Set<ListColumn>
+    /// The direction the user last sorted by name in. Used when the sorted column is hidden and the list falls back to
+    /// sorting by name.
+    public var nameSortAscending: Bool
     private var storedThumbnailSize: Double
 
     public var thumbnailSize: Double {
@@ -24,7 +29,9 @@ public struct ViewSettings: Sendable, Equatable {
         sortOrder: SortOrder = SortOrder(),
         lastFolder: URL? = nil,
         showsToolbar: Bool = false,
-        showsZipFiles: Bool = false
+        showsZipFiles: Bool = false,
+        visibleColumns: Set<ListColumn> = ListColumn.defaultVisible,
+        nameSortAscending: Bool = true
     ) {
         self.displayMode = displayMode
         self.storedThumbnailSize = Self.clampThumbnailSize(thumbnailSize)
@@ -32,6 +39,8 @@ public struct ViewSettings: Sendable, Equatable {
         self.lastFolder = lastFolder
         self.showsToolbar = showsToolbar
         self.showsZipFiles = showsZipFiles
+        self.visibleColumns = visibleColumns
+        self.nameSortAscending = nameSortAscending
     }
 
     public static func clampThumbnailSize(_ value: Double) -> Double {
@@ -49,6 +58,8 @@ public enum SortColumn: String, Sendable, CaseIterable {
     case name
     case creationDate
     case kind
+    case size
+    case modificationDate
     /// Used only while showing search results (FR-084). Not persisted.
     case location
 }

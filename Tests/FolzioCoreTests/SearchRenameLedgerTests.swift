@@ -114,6 +114,21 @@ struct SearchRenameLedgerTests {
         #expect(row?.name == "F2")
     }
 
+    @Test("Case-only folder renames update delayed rows and descendants")
+    func placesCaseOnlyFolderRename() {
+        let log = SearchVisitLog()
+        log.record("/r/Album")
+        var ledger = SearchRenameLedger()
+        let index = ledger.addStream(visits: log)
+        ledger.recordRename(renamed("/r/Album", "/r/album"), visited: true)
+        #expect(ledger.hasVisited(url("/r/album")))
+        let row = ledger.place(folder("/r/Album"), fromStream: index)
+        #expect(row?.name == "album")
+        #expect(row?.url.path == "/r/album")
+        #expect(ledger.place(media("/r/Album/sub/photo.jpg"), fromStream: index)?.url.path
+            == "/r/album/sub/photo.jpg")
+    }
+
     @Test("Results from an enumeration started after the rename remain unchanged")
     func laterStreamsAreUnaffected() {
         var ledger = SearchRenameLedger()

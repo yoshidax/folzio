@@ -16,6 +16,8 @@ public enum NameValidationFailure: Error, Sendable, Equatable {
     case becomesPackage
 }
 
+/// Validates a name against sibling entries supplied in `existingNames`, excluding only the source's exact name.
+/// Treats every remaining entry as a conflict, even when it links to the source.
 /// When `isDirectory` is true (renaming a folder), does not treat the part after `.` as an extension and does not
 /// return `needsExtensionChangeConfirmation` (research.md R32). Rejects names that would make the folder a package
 /// (such as `.app`) because the folder would no longer be visible (EC-53, R57).
@@ -48,6 +50,14 @@ public func validateNewName(
         return .needsExtensionChangeConfirmation
     }
     return .ok
+}
+
+/// Returns the name for a new folder (FR-209, research.md R2).
+/// Returns `baseName` when no entry in `existingNames` matches it, ignoring case.
+/// Otherwise numbers it from 2 with `uniqueName(for:existingNames:)`, matching Duplicate (FR-018).
+public func newFolderName(baseName: String, existingNames: Set<String>) -> String {
+    let isTaken = existingNames.contains { $0.caseInsensitiveCompare(baseName) == .orderedSame }
+    return isTaken ? uniqueName(for: baseName, existingNames: existingNames) : baseName
 }
 
 public func uniqueName(for name: String, existingNames: Set<String>) -> String {

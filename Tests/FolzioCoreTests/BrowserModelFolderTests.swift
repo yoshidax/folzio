@@ -109,7 +109,7 @@ struct BrowserModelFolderTests {
         defer { env.cleanup() }
         await env.model.selectFolder(env.root)
 
-        #expect(env.model.listing.files.map(\.name) == ["cover.jpg", "empty", "only", "trip"])
+        #expect(env.model.listing.files.map(\.name) == ["empty", "only", "trip", "cover.jpg"])
         #expect(env.row("trip")?.kind == .folder)
         #expect(!env.model.listing.files.contains { $0.kind == .parent })
         #expect(env.model.hasEnclosingLevel == false)
@@ -376,6 +376,147 @@ struct BrowserModelFolderTests {
         #expect(env.model.treeSyncRequest == nil)
     }
 
+    // MARK: - Vanished Displayed Folder or Ancestor (FR-042, EC-13)
+
+    @Test("Renaming the displayed folder externally moves to the parent when only the parent is reported")
+    func renamingDisplayedFolderReportedAsParentChange() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        _ = try await showDay1Photo(env)
+        _ = try rename(env, "trip/day1", to: "renamed")
+
+        // The watcher reports a renamed folder only as a change to its parent.
+        await env.model.handleFileSystemEvent([env.url("trip")])
+
+        #expect(path(env.model.listing.folder) == path(env.url("trip")))
+        #expect(env.row("trip/day1/1.jpg") == nil)
+        #expect(env.row("trip/renamed") != nil)
+        #expect(isEmptyPreview(env.model.preview))
+        #expect(env.model.treeSyncRequest == nil)
+    }
+
+    @Test("Deleting an ancestor externally moves to the nearest folder that still exists")
+    func deletingAncestorMovesToNearestExistingFolder() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        _ = try await showDay1Photo(env)
+        try FileManager.default.removeItem(at: env.url("trip"))
+
+        // Moving `trip` to the Trash in Finder reports only its parent.
+        await env.model.handleFileSystemEvent([env.root])
+
+        #expect(path(env.model.listing.folder) == path(env.root))
+        #expect(env.row("trip/day1/1.jpg") == nil)
+        #expect(env.row("cover.jpg") != nil)
+        #expect(isEmptyPreview(env.model.preview))
+        #expect(env.model.treeSyncRequest == nil)
+    }
+
+    @Test("Deleting an ancestor with its contents skips parents that vanished with the displayed folder")
+    func deletingAncestorWithContentsSkipsVanishedParents() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        _ = try await showDay1Photo(env)
+        try FileManager.default.removeItem(at: env.url("trip"))
+
+        // `rm -rf` reports the contents too, so the displayed folder itself is among the reported folders.
+        await env.model.handleFileSystemEvent([env.url("trip/day1"), env.url("trip"), env.root])
+
+        #expect(path(env.model.listing.folder) == path(env.root))
+        #expect(env.model.listing.state == .loaded)
+        #expect(env.row("cover.jpg") != nil)
+    }
+
+    @Test("A change in an ancestor keeps the displayed folder, its selection, and its preview when it still exists")
+    func ancestorChangeKeepsExistingFolder() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let photo = try await showDay1Photo(env)
+        try FileManager.default.createDirectory(at: env.url("trip/day3"), withIntermediateDirectories: true)
+
+        await env.model.handleFileSystemEvent([env.url("trip"), env.root])
+
+        #expect(path(env.model.listing.folder) == path(env.url("trip/day1")))
+        #expect(env.model.selection.focused == photo)
+        #expect(isImagePreview(env.model.preview))
+    }
+
+    @Test("A change in a sibling whose name starts with the displayed folder's name is ignored")
+    func siblingWithSharedPrefixIsIgnored() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        _ = try await showDay1Photo(env)
+        try FileManager.default.createDirectory(at: env.url("trip/day1x"), withIntermediateDirectories: true)
+        try FileManager.default.removeItem(at: env.url("trip/day1"))
+
+        // `trip/day1x` is not an ancestor of `trip/day1`, so this event does not check the displayed folder.
+        await env.model.handleFileSystemEvent([env.url("trip/day1x")])
+
+        #expect(path(env.model.listing.folder) == path(env.url("trip/day1")))
+    }
+
+    @Test("A vanished folder is shown as not found instead of moving out of its removed volume root")
+    func vanishedVolumeRootShowsNotFound() async throws {
+        // `trip` stands for a volume root whose mount point disappears when the volume is removed.
+        let env = try makeEnv(roots: ["", "trip"])
+        defer { env.cleanup() }
+        _ = try await showDay1Photo(env)
+        try FileManager.default.removeItem(at: env.url("trip"))
+
+        await env.model.handleFileSystemEvent([env.root])
+
+        #expect(path(env.model.listing.folder) == path(env.url("trip/day1")))
+        #expect(env.model.listing.state == .failed(.folderNotFound))
+        #expect(env.row("trip/day1/1.jpg") == nil)
+        #expect(isEmptyPreview(env.model.preview))
+    }
+
+    @Test("A change in an ancestor keeps the not-found display of a missing folder")
+    func ancestorChangeKeepsNotFoundDisplay() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        await env.model.selectFolder(env.url("trip/missing"))
+        #expect(env.model.listing.state == .failed(.folderNotFound))
+
+        await env.model.handleFileSystemEvent([env.url("trip")])
+
+        #expect(path(env.model.listing.folder) == path(env.url("trip/missing")))
+        #expect(env.model.listing.state == .failed(.folderNotFound))
+    }
+
+    // MARK: - Removed Volume (EC-18, EC-65)
+
+    @Test("Removing the volume of the displayed folder shows it as not found and clears the listing and preview")
+    func volumeRemovalShowsNotFound() async throws {
+        let env = try makeEnv(roots: ["", "trip"])
+        defer { env.cleanup() }
+        _ = try await showDay1Photo(env)
+        try FileManager.default.removeItem(at: env.url("trip"))
+        env.model.setNavigationRoots([env.root])
+
+        await env.model.handleVolumesChanged()
+
+        #expect(path(env.model.listing.folder) == path(env.url("trip/day1")))
+        #expect(env.model.listing.state == .failed(.folderNotFound))
+        #expect(env.row("trip/day1/1.jpg") == nil)
+        #expect(env.model.selection.selected.isEmpty)
+        #expect(isEmptyPreview(env.model.preview))
+        #expect(env.model.historyLocation == nil)
+    }
+
+    @Test("A volume change keeps the displayed folder, its selection, and its preview when it still exists")
+    func volumeChangeKeepsExistingFolder() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let photo = try await showDay1Photo(env)
+
+        await env.model.handleVolumesChanged()
+
+        #expect(path(env.model.listing.folder) == path(env.url("trip/day1")))
+        #expect(env.model.selection.focused == photo)
+        #expect(isImagePreview(env.model.preview))
+    }
+
     // MARK: - Leaving Trashed Folders (FR-079)
 
     @Test("Deleting the current folder shows its parent, clears selection and preview, and increments the synchronization request")
@@ -534,28 +675,29 @@ struct BrowserModelFolderTests {
         return (old, new)
     }
 
-    @Test("Renaming an ancestor updates the listing, selection, and lastFolder to the new location and preserves the preview")
-    func renamingAncestorRebasesListing() async throws {
+    @Test("Renaming an ancestor updates the listing, selection, and lastFolder to the new location and preserves the preview",
+          arguments: ["trip2", "Trip"])
+    func renamingAncestorRebasesListing(newName: String) async throws {
         let env = try makeEnv()
         defer { env.cleanup() }
         _ = try await showDay1Photo(env)
         let signal = env.model.stopPlaybackSignal
 
-        let (old, new) = try rename(env, "trip", to: "trip2")
+        let (old, new) = try rename(env, "trip", to: newName)
         env.model.didRenameFolder(from: old, to: new)
 
-        #expect(path(env.model.listing.folder) == path(env.url("trip2/day1")))
-        #expect(path(env.model.selection.focused) == path(env.url("trip2/day1/1.jpg")))
-        #expect(env.model.selection.selected.map { path($0) } == [path(env.url("trip2/day1/1.jpg"))])
-        #expect(env.row("trip2/day1/1.jpg") != nil)
-        #expect(env.model.listing.files.first?.url == ParentLink.url(for: env.url("trip2/day1")))
+        #expect(path(env.model.listing.folder) == path(env.url(newName + "/day1")))
+        #expect(path(env.model.selection.focused) == path(env.url(newName + "/day1/1.jpg")))
+        #expect(env.model.selection.selected.map { path($0) } == [path(env.url(newName + "/day1/1.jpg"))])
+        #expect(env.row(newName + "/day1/1.jpg") != nil)
+        #expect(env.model.listing.files.first?.url == ParentLink.url(for: env.url(newName + "/day1")))
         #expect(isImagePreview(env.model.preview))
         #expect(env.model.stopPlaybackSignal == signal)
-        #expect(path(env.lastFolder) == path(env.url("trip2/day1")))
+        #expect(path(env.lastFolder) == path(env.url(newName + "/day1")))
 
         // ⌘↑ returns to the folder under its new name (US1-AS40).
         await env.model.goToEnclosingLevel()
-        #expect(path(env.model.listing.folder) == path(env.url("trip2")))
+        #expect(path(env.model.listing.folder) == path(env.url(newName)))
     }
 
     @Test("An event for the old location after renaming the current folder does not navigate to the parent")
@@ -585,7 +727,7 @@ struct BrowserModelFolderTests {
         let (old, new) = try rename(env, "trip", to: "a-trip")
         env.model.didRenameFolder(from: old, to: new)
 
-        #expect(env.model.listing.files.map(\.name) == ["a-trip", "cover.jpg", "empty", "only"])
+        #expect(env.model.listing.files.map(\.name) == ["a-trip", "empty", "only", "cover.jpg"])
         #expect(env.row("a-trip")?.kind == .folder)
         #expect(path(env.model.selection.focused) == path(env.url("a-trip")))
     }

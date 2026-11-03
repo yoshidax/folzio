@@ -1,4 +1,6 @@
-import AVFoundation
+// `[AVAssetTrack]` is not `Sendable` in the Swift 6.0 SDK. `@preconcurrency` keeps that diagnostic a warning,
+// so the same code builds with both the oldest supported and the latest toolchains.
+@preconcurrency import AVFoundation
 import AVKit
 import AppKit
 import FolzioCore
@@ -35,7 +37,13 @@ final class VideoPreviewView: NSView {
         fatalError("init(coder:) is not supported")
     }
 
-    override var acceptsFirstResponder: Bool { true }
+    /// The container itself never takes keyboard focus.
+    /// The inner player view handles Space, arrow keys, and the other standard video control keys (FR-033, FR-248),
+    /// so focus goes there instead (bug: tak-48).
+    override var acceptsFirstResponder: Bool { false }
+
+    /// The view that receives keyboard focus while a video is shown.
+    var focusTargetView: NSView { playerView }
 
     var isPlaying: Bool {
         guard let player else { return false }

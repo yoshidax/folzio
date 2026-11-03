@@ -22,22 +22,36 @@ public struct ImageDecoder: ImageDecoding {
     public init() {}
 
     public func decode(_ url: URL, maxPixelSize: Int) async throws(DecodeError) -> DecodedImage {
-        do {
-            return try await Task.detached(priority: .userInitiated) {
-                try Self.decodeSynchronously(url, maxPixelSize: maxPixelSize)
-            }.value
-        } catch let error as DecodeError {
-            throw error
-        } catch {
-            throw DecodeError.corrupted
+        try await Self.runDetached {
+            try Self.decodeSynchronously(url, maxPixelSize: maxPixelSize)
         }
     }
 
     public func decode(data: Data, maxPixelSize: Int) async throws(DecodeError) -> DecodedImage {
+        try await Self.runDetached {
+            try Self.decodeSynchronously(data: data, maxPixelSize: maxPixelSize)
+        }
+    }
+
+    /// Runs the decoding work on a detached task and forwards cancellation of the caller to it.
+    ///
+    /// A task cancelled before the work starts does not decode. Decoding that already started cannot be
+    /// interrupted and runs to the end (EC-196). A cancelled call throws a `DecodeError`, so callers tell
+    /// cancellation from a real failure with `Task.isCancelled`.
+    private static func runDetached(
+        _ work: @escaping @Sendable () throws -> DecodedImage
+    ) async throws(DecodeError) -> DecodedImage {
+        guard !Task.isCancelled else { throw DecodeError.unreadable }
+        let task = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            return try work()
+        }
         do {
-            return try await Task.detached(priority: .userInitiated) {
-                try Self.decodeSynchronously(data: data, maxPixelSize: maxPixelSize)
-            }.value
+            return try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
         } catch let error as DecodeError {
             throw error
         } catch {

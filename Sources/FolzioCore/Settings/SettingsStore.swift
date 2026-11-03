@@ -13,9 +13,13 @@ public struct SettingsStore {
         static let thumbnailSize = "view.thumbnailSize"
         static let sortColumn = "view.sort.column"
         static let sortAscending = "view.sort.ascending"
+        static let nameSortAscending = "view.sort.nameAscending"
+        static let visibleColumns = "view.list.visibleColumns"
         static let lastFolderPath = "view.lastFolderPath"
         static let showsToolbar = "view.showsToolbar"
         static let showsZipFiles = "view.showsZipFiles"
+        static let toolbarItems = "view.toolbarItems"
+        static let toolbarDisplayMode = "view.toolbarDisplayMode"
         static let autoplay = "playback.autoplay"
         static let loop = "playback.loop"
         static let confirmBeforeExecuting = "fileOps.confirmBeforeExecuting"
@@ -24,6 +28,7 @@ public struct SettingsStore {
         static let slideshowIntervalSeconds = "slideshow.intervalSeconds"
         static let slideshowRepeats = "slideshow.repeats"
         static let slideshowTransition = "slideshow.transition"
+        static let shortcutOverrides = "shortcuts.overrides"
     }
 
     private let defaults: UserDefaults
@@ -54,6 +59,7 @@ public struct SettingsStore {
                 .flatMap(SortColumn.init(rawValue:))
                 .flatMap { $0 == .location ? nil : $0 } ?? .name
             let ascending = storedBool(forKey: Keys.sortAscending) ?? true
+            let nameAscending = column == .name ? ascending : (storedBool(forKey: Keys.nameSortAscending) ?? true)
             let lastFolder = (defaults.object(forKey: Keys.lastFolderPath) as? String)
                 .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
             let showsToolbar = storedBool(forKey: Keys.showsToolbar) ?? false
@@ -65,7 +71,9 @@ public struct SettingsStore {
                 sortOrder: SortOrder(column: column, ascending: ascending),
                 lastFolder: lastFolder,
                 showsToolbar: showsToolbar,
-                showsZipFiles: showsZipFiles
+                showsZipFiles: showsZipFiles,
+                visibleColumns: ListColumn.visibleColumns(fromStored: defaults.object(forKey: Keys.visibleColumns)),
+                nameSortAscending: nameAscending
             )
         }
         nonmutating set {
@@ -82,6 +90,55 @@ public struct SettingsStore {
             }
             defaults.set(newValue.showsToolbar, forKey: Keys.showsToolbar)
             defaults.set(newValue.showsZipFiles, forKey: Keys.showsZipFiles)
+            defaults.set(ListColumn.storedValue(of: newValue.visibleColumns), forKey: Keys.visibleColumns)
+            defaults.set(
+                newValue.sortOrder.column == .name ? newValue.sortOrder.ascending : newValue.nameSortAscending,
+                forKey: Keys.nameSortAscending
+            )
+        }
+    }
+
+    /// The user's shortcut overrides (command raw value → stored combination). A value that is not a dictionary
+    /// reads as empty, and entries whose value is not a string are dropped. Setting an empty dictionary removes the key
+    /// (FR-262). Entries that are not valid assignments are dropped by `ShortcutAssignments`.
+    public var shortcutOverrides: [String: String] {
+        get {
+            (defaults.object(forKey: Keys.shortcutOverrides) as? [String: Any])?.compactMapValues { $0 as? String } ?? [:]
+        }
+        nonmutating set {
+            if newValue.isEmpty {
+                defaults.removeObject(forKey: Keys.shortcutOverrides)
+            } else {
+                defaults.set(newValue, forKey: Keys.shortcutOverrides)
+            }
+        }
+    }
+
+    /// Whether the user has customized the toolbar, so that a saved item order exists.
+    public var hasSavedToolbarItemOrder: Bool {
+        defaults.object(forKey: Keys.toolbarItems) != nil
+    }
+
+    /// The toolbar item order. Reads a valid order even when the stored value is broken (see `ToolbarLayout`).
+    public var toolbarItemOrder: [String] {
+        get { ToolbarLayout.normalized(saved: defaults.object(forKey: Keys.toolbarItems)) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.toolbarItems) }
+    }
+
+    /// Removes the saved toolbar item order, so that the default order is used again.
+    public func clearToolbarItemOrder() {
+        defaults.removeObject(forKey: Keys.toolbarItems)
+    }
+
+    /// The raw value of the toolbar's display mode, or nil when the user has not changed it.
+    public var toolbarDisplayModeRawValue: Int? {
+        get { defaults.object(forKey: Keys.toolbarDisplayMode) as? Int }
+        nonmutating set {
+            if let newValue {
+                defaults.set(newValue, forKey: Keys.toolbarDisplayMode)
+            } else {
+                defaults.removeObject(forKey: Keys.toolbarDisplayMode)
+            }
         }
     }
 

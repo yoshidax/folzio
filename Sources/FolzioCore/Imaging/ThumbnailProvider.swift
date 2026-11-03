@@ -4,9 +4,11 @@ import Foundation
 import ImageIO
 import QuickLookThumbnailing
 
+/// Provides thumbnails. `version` identifies the content of the file; thumbnails of another version are not
+/// returned, so a file replaced at the same path gets a new thumbnail (FR-228, research.md R3).
 public protocol ThumbnailProviding: Sendable {
-    func thumbnail(for url: URL, pointSize: Double, scale: Double) async -> CGImage?
-    func cancel(for url: URL, pointSize: Double, scale: Double)
+    func thumbnail(for url: URL, pointSize: Double, scale: Double, version: FileContentVersion?) async -> CGImage?
+    func cancel(for url: URL, pointSize: Double, scale: Double, version: FileContentVersion?)
 }
 
 public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
@@ -41,6 +43,7 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
     private struct InFlightRequest {
         let url: URL
         let pixelSize: Int
+        let version: FileContentVersion?
         /// Cancellation of the QuickLook request or of the zip retrieval task
         let cancel: @Sendable () -> Void
     }
@@ -64,16 +67,27 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
         cache.totalCostLimit = MemoryLimits.thumbnailCacheBytes
     }
 
-    public func thumbnail(for url: URL, pointSize: Double, scale: Double) async -> CGImage? {
+    public func thumbnail(
+        for url: URL,
+        pointSize: Double,
+        scale: Double,
+        version: FileContentVersion?
+    ) async -> CGImage? {
         let pixelSize = Self.pixelSize(forPointSize: pointSize, scale: scale)
-        let key = Self.cacheKey(for: url, pixelSize: pixelSize)
+        let key = Self.cacheKey(for: url, pixelSize: pixelSize, version: version)
 
         if let cached = cache.object(forKey: key) {
             return cached.image
         }
 
         if let location = ArchiveURL.parse(url) {
-            return await archiveThumbnail(for: url, path: location.path, pixelSize: pixelSize, key: key)
+            return await archiveThumbnail(
+                for: url,
+                path: location.path,
+                pixelSize: pixelSize,
+                version: version,
+                key: key
+            )
         }
 
         let request = QLThumbnailGenerator.Request(
@@ -87,6 +101,7 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
             inFlight[identifier] = InFlightRequest(
                 url: url,
                 pixelSize: pixelSize,
+                version: version,
                 cancel: { [box = SendableBox((generator, request))] in box.value.0.cancel(box.value.1) }
             )
         }
@@ -107,11 +122,11 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
         }
     }
 
-    public func cancel(for url: URL, pointSize: Double, scale: Double) {
+    public func cancel(for url: URL, pointSize: Double, scale: Double, version: FileContentVersion?) {
         let pixelSize = Self.pixelSize(forPointSize: pointSize, scale: scale)
         let cancellations: [@Sendable () -> Void] = lock.withLock {
             let matches = inFlight.filter {
-                $0.value.url == url && $0.value.pixelSize == pixelSize
+                $0.value.url == url && $0.value.pixelSize == pixelSize && $0.value.version == version
             }
             for identifier in matches.keys {
                 inFlight[identifier] = nil
@@ -127,7 +142,13 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
     /// Images and videos inside a zip. Does not use QuickLook. Creates a downscaled image from `Data` with
     /// ImageIO, and a first frame for videos with `AVAssetImageGenerator`. Returns nil for encrypted entries,
     /// unsupported methods, and failures.
-    private func archiveThumbnail(for url: URL, path: String, pixelSize: Int, key: NSString) async -> CGImage? {
+    private func archiveThumbnail(
+        for url: URL,
+        path: String,
+        pixelSize: Int,
+        version: FileContentVersion?,
+        key: NSString
+    ) async -> CGImage? {
         guard let archiveReader,
               let kind = MediaKind(fileExtension: (path as NSString).pathExtension)
         else { return nil }
@@ -151,6 +172,7 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
             inFlight[identifier] = InFlightRequest(
                 url: url,
                 pixelSize: pixelSize,
+                version: version,
                 cancel: { task.cancel() }
             )
         }
@@ -211,8 +233,15 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
         }
     }
 
-    private static func cacheKey(for url: URL, pixelSize: Int) -> NSString {
-        "\(url.absoluteString)#\(pixelSize)" as NSString
+    /// Cache key of a thumbnail. Includes the content version so that thumbnails of replaced content miss
+    /// (research.md R3). Without a version, the key is the URL and the pixel size.
+    static func cacheKey(for url: URL, pixelSize: Int, version: FileContentVersion?) -> NSString {
+        guard let version else {
+            return "\(url.absoluteString)#\(pixelSize)" as NSString
+        }
+        let date = version.modificationDate.map { String($0.timeIntervalSinceReferenceDate) } ?? "-"
+        let identifier = version.fileIdentifier.map(String.init) ?? "-"
+        return "\(url.absoluteString)#\(pixelSize)#\(version.fileSize):\(date):\(identifier)" as NSString
     }
 }
 

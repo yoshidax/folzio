@@ -126,7 +126,7 @@ struct SettingsStoreTests {
 
             defaults.set("large", forKey: "view.thumbnailSize")
             defaults.set("grid", forKey: "view.displayMode")
-            defaults.set("size", forKey: "view.sort.column")
+            defaults.set("owner", forKey: "view.sort.column")
             defaults.set("yes", forKey: "view.sort.ascending")
             defaults.set("no", forKey: "playback.autoplay")
             defaults.set("yes", forKey: "view.showsToolbar")
@@ -548,6 +548,72 @@ struct SettingsStoreTests {
             #expect(!store.confirmation.confirmBeforeFileOperations)
             #expect(store.favorites.urls == [a])
             #expect(store.favorites.customName(for: a) == "one")
+        }
+    }
+
+    @Test("The visible list columns default to Date Created and Kind")
+    func visibleColumnsDefault() {
+        withDefaults { defaults in
+            #expect(SettingsStore(defaults: defaults).viewSettings.visibleColumns == [.creationDate, .kind])
+        }
+    }
+
+    @Test("Saves and restores the visible list columns, including an empty set")
+    func visibleColumnsRoundTrip() {
+        withDefaults { defaults in
+            let store = SettingsStore(defaults: defaults)
+            for columns: Set<ListColumn> in [[.size, .modificationDate], [], Set(ListColumn.allCases)] {
+                var view = store.viewSettings
+                view.visibleColumns = columns
+                store.viewSettings = view
+                #expect(SettingsStore(defaults: defaults).viewSettings.visibleColumns == columns)
+            }
+        }
+    }
+
+    @Test("Ignores unknown columns and falls back to the default for a broken value")
+    func visibleColumnsIgnoreBrokenValues() {
+        withDefaults { defaults in
+            let store = SettingsStore(defaults: defaults)
+            defaults.set(["size", "owner", "name", ""], forKey: "view.list.visibleColumns")
+            #expect(store.viewSettings.visibleColumns == [.size])
+            for broken in ["size", 3, true, [1, 2]] as [Any] {
+                defaults.set(broken, forKey: "view.list.visibleColumns")
+                #expect(store.viewSettings.visibleColumns == [.creationDate, .kind])
+            }
+        }
+    }
+
+    @Test("Restores the sort column size and modification date")
+    func sortColumnsRoundTrip() {
+        withDefaults { defaults in
+            let store = SettingsStore(defaults: defaults)
+            for column in [SortColumn.size, .modificationDate] {
+                var view = store.viewSettings
+                view.sortOrder = SortOrder(column: column, ascending: false)
+                store.viewSettings = view
+                #expect(SettingsStore(defaults: defaults).viewSettings.sortOrder == SortOrder(column: column, ascending: false))
+            }
+        }
+    }
+
+    @Test("Keeps the last direction of the name sort while another column is sorted")
+    func nameSortDirectionIsKept() {
+        withDefaults { defaults in
+            let store = SettingsStore(defaults: defaults)
+            #expect(store.viewSettings.nameSortAscending)
+
+            var view = store.viewSettings
+            view.sortOrder = SortOrder(column: .name, ascending: false)
+            store.viewSettings = view
+            #expect(!store.viewSettings.nameSortAscending)
+
+            view = store.viewSettings
+            view.sortOrder = SortOrder(column: .size, ascending: true)
+            store.viewSettings = view
+            let restored = SettingsStore(defaults: defaults).viewSettings
+            #expect(restored.sortOrder == SortOrder(column: .size, ascending: true))
+            #expect(!restored.nameSortAscending)
         }
     }
 
