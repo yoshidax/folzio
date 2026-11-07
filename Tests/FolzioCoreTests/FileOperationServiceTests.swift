@@ -466,6 +466,69 @@ struct FileOperationServiceTests {
         #expect(try Data(contentsOf: destination.appendingPathComponent("c 2.jpg")) == Data("existing-c".utf8))
     }
 
+    @Test("Large counters preserve existing files when duplicating and keeping both")
+    func keepsBothBeyondIntegerLimit() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try makeOps(in: root)
+        let destination = folder.appendingPathComponent("dest", isDirectory: true)
+        let name = "photo 9223372036854775807.jpg"
+        let source = folder.appendingPathComponent(name)
+        let existing = destination.appendingPathComponent(name)
+        let occupied = destination.appendingPathComponent("photo 9223372036854775808.jpg")
+        let sourceData = Data("source".utf8)
+        let existingData = Data("existing".utf8)
+        let occupiedData = Data("occupied".utf8)
+        try sourceData.write(to: source)
+        try existingData.write(to: existing)
+        try occupiedData.write(to: occupied)
+
+        let duplicate = await service.execute(
+            FileOperation(kind: .copy, sources: [source], destination: folder), resolution: .keepBoth
+        )
+        let duplicateURL = folder.appendingPathComponent("photo 9223372036854775808.jpg")
+        #expect(duplicate.failed.isEmpty)
+        #expect(duplicate.succeeded == [duplicateURL])
+        #expect(try Data(contentsOf: duplicateURL) == sourceData)
+
+        let copy = await service.execute(
+            FileOperation(kind: .copy, sources: [source], destination: destination), resolution: .keepBoth
+        )
+        let copyURL = destination.appendingPathComponent("photo 9223372036854775809.jpg")
+        #expect(copy.failed.isEmpty)
+        #expect(copy.succeeded == [copyURL])
+        #expect(try Data(contentsOf: copyURL) == sourceData)
+        #expect(try Data(contentsOf: source) == sourceData)
+        #expect(try Data(contentsOf: existing) == existingData)
+        #expect(try Data(contentsOf: occupied) == occupiedData)
+    }
+
+    @Test("Duplicating a maximum-length name reports failure and preserves the source")
+    func rejectsDuplicateWhenCounterExceedsNameLimit() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let name = "p " + String(repeating: "9", count: 249) + ".jpg"
+        let source = root.appendingPathComponent(name)
+        let contents = Data("original".utf8)
+        #expect(name.utf8.count == 255)
+        try contents.write(to: source)
+
+        let result = await service.execute(
+            FileOperation(kind: .copy, sources: [source], destination: root), resolution: .keepBoth
+        )
+
+        #expect(result.succeeded.isEmpty)
+        let failure = try #require(result.failed.first)
+        #expect(result.failed.count == 1)
+        #expect(failure.url == source)
+        guard case .systemFailure = failure.reason else {
+            Issue.record("Expected a system error, got \(failure.reason)")
+            return
+        }
+        #expect(try Data(contentsOf: source) == contents)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path) == [name])
+    }
+
     @Test("Copying with abort fails on a destination name conflict and preserves the existing item")
     func abortsCopyOnConflict() async throws {
         let root = try makeTemporaryDirectory()

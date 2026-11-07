@@ -4,11 +4,11 @@ import Testing
 
 @Suite("TreeBatchTargets")
 struct TreeBatchTargetsTests {
-    private let roots = [URL(fileURLWithPath: "/"), URL(fileURLWithPath: "/Users/me")]
-    private let a = URL(fileURLWithPath: "/Users/me/a")
-    private let b = URL(fileURLWithPath: "/Users/me/b")
+    private let roots = [URL(fileURLWithPath: "/"), URL(fileURLWithPath: "/test-homes/me")]
+    private let a = URL(fileURLWithPath: "/test-homes/me/a")
+    private let b = URL(fileURLWithPath: "/test-homes/me/b")
     private let c = URL(fileURLWithPath: "/Volumes/Ext/c")
-    private let home = URL(fileURLWithPath: "/Users/me")
+    private let home = URL(fileURLWithPath: "/test-homes/me")
 
     // MARK: Targets (FR-217)
 
@@ -58,9 +58,9 @@ struct TreeBatchTargetsTests {
     @Test(
         "Any root, favorite, or heading among multiple targets makes Trash and drag unavailable (FR-218 (1))",
         arguments: [
-            TreeItemRole.folder(URL(fileURLWithPath: "/Users/me")),
+            TreeItemRole.folder(URL(fileURLWithPath: "/test-homes/me")),
             .folder(URL(fileURLWithPath: "/")),
-            .favorite(URL(fileURLWithPath: "/Users/me/fav")),
+            .favorite(URL(fileURLWithPath: "/test-homes/me/fav")),
             .favoritesHeader,
         ]
     )
@@ -73,9 +73,9 @@ struct TreeBatchTargetsTests {
     @Test(
         "A single target matches FavoriteCommands for Trash, removal, and rename",
         arguments: [
-            TreeItemRole.folder(URL(fileURLWithPath: "/Users/me/a")),
-            .folder(URL(fileURLWithPath: "/Users/me")),
-            .favorite(URL(fileURLWithPath: "/Users/me/fav")),
+            TreeItemRole.folder(URL(fileURLWithPath: "/test-homes/me/a")),
+            .folder(URL(fileURLWithPath: "/test-homes/me")),
+            .favorite(URL(fileURLWithPath: "/test-homes/me/fav")),
             .favoritesHeader,
         ]
     )
@@ -118,16 +118,16 @@ struct TreeBatchTargetsTests {
 
     @Test("Siblings and names that share a prefix do not overlap (EC-146)")
     func siblingsDoNotOverlap() {
-        let ab = URL(fileURLWithPath: "/Users/me/ab")
+        let ab = URL(fileURLWithPath: "/test-homes/me/ab")
         #expect(TreeBatchTargets(selection: [.folder(a), .folder(ab)]).trashTargets(roots: roots) == .folders([a, ab]))
         #expect(!TreeBatchTargets.containsOverlap([a, b, ab]))
     }
 
     @Test("Overlap compares standardized paths")
     func overlapUsesStandardizedPaths() {
-        let child = URL(fileURLWithPath: "/Users/me/b/../a/child")
+        let child = URL(fileURLWithPath: "/test-homes/me/b/../a/child")
         #expect(TreeBatchTargets.containsOverlap([a, child]))
-        #expect(TreeBatchTargets.containsOverlap([a, URL(fileURLWithPath: "/Users/me/a/")]))
+        #expect(TreeBatchTargets.containsOverlap([a, URL(fileURLWithPath: "/test-homes/me/a/")]))
     }
 
     @Test("Overlapping folders can still start a drag; the drop validation rejects them (EC-121)")

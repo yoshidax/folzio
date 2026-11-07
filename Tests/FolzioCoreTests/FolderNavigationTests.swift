@@ -6,7 +6,7 @@ import Testing
 struct FolderNavigationTests {
     private static let roots = [
         URL(fileURLWithPath: "/", isDirectory: true),
-        URL(fileURLWithPath: "/Users/me", isDirectory: true),
+        URL(fileURLWithPath: "/test-homes/me", isDirectory: true),
         URL(fileURLWithPath: "/Volumes/Ext", isDirectory: true),
     ]
 
@@ -18,43 +18,43 @@ struct FolderNavigationTests {
         FolderNavigation.enclosingFolder(of: folder(path), roots: roots)?.standardizedFileURL.path
     }
 
-    @Test("Returns nil at the root itself", arguments: ["/", "/Users/me", "/Users/me/", "/Volumes/Ext", "/Volumes/Ext/"])
+    @Test("Returns nil at the root itself", arguments: ["/", "/test-homes/me", "/test-homes/me/", "/Volumes/Ext", "/Volumes/Ext/"])
     func rootHasNoEnclosingFolder(path: String) {
         #expect(enclosing(path) == nil)
     }
 
     @Test("Under the home folder, returns the parent within the deepest matching home root")
     func deepestRootWins() {
-        #expect(enclosing("/Users/me/a") == "/Users/me")
-        #expect(enclosing("/Users/me/a/b") == "/Users/me/a")
+        #expect(enclosing("/test-homes/me/a") == "/test-homes/me")
+        #expect(enclosing("/test-homes/me/a/b") == "/test-homes/me/a")
     }
 
     @Test("Returns parents within the startup and external volumes")
     func volumes() {
-        #expect(enclosing("/Users/x") == "/Users")
-        #expect(enclosing("/Users") == "/")
+        #expect(enclosing("/test-homes/x") == "/test-homes")
+        #expect(enclosing("/test-homes") == "/")
         #expect(enclosing("/Volumes/Ext/p") == "/Volumes/Ext")
     }
 
     @Test("Compares path components without false string-prefix matches")
     func comparesPathComponents() {
-        let homeOnly = [folder("/Users/me")]
-        #expect(enclosing("/Users/me2/a", roots: homeOnly) == nil)
-        #expect(enclosing("/Users/me/./a/../b/c", roots: homeOnly) == "/Users/me/b")
-        #expect(enclosing("/Users/me/./a/../b", roots: homeOnly) == "/Users/me")
+        let homeOnly = [folder("/test-homes/me")]
+        #expect(enclosing("/test-homes/me2/a", roots: homeOnly) == nil)
+        #expect(enclosing("/test-homes/me/./a/../b/c", roots: homeOnly) == "/test-homes/me/b")
+        #expect(enclosing("/test-homes/me/./a/../b", roots: homeOnly) == "/test-homes/me")
     }
 
     @Test("Returns nil outside all roots or with an empty roots list")
     func outsideRoots() {
-        #expect(enclosing("/Volumes/Other/a", roots: [folder("/Users/me"), folder("/Volumes/Ext")]) == nil)
-        #expect(enclosing("/Users/me/a", roots: []) == nil)
+        #expect(enclosing("/Volumes/Other/a", roots: [folder("/test-homes/me"), folder("/Volumes/Ext")]) == nil)
+        #expect(enclosing("/test-homes/me/a", roots: []) == nil)
     }
 
     // MARK: - folderToShow(afterTrashing:showing:roots:)（FR-079）
 
     private static let trashRoots = [
         URL(fileURLWithPath: "/", isDirectory: true),
-        URL(fileURLWithPath: "/Users/me", isDirectory: true),
+        URL(fileURLWithPath: "/test-homes/me", isDirectory: true),
     ]
 
     private func shown(_ trashed: [String], showing: String, roots: [URL] = Self.trashRoots) -> String? {
@@ -67,36 +67,36 @@ struct FolderNavigationTests {
 
     @Test("Trashing the current folder returns its parent")
     func trashedShowingFolder() {
-        #expect(shown(["/Users/me/a/b"], showing: "/Users/me/a/b") == "/Users/me/a")
+        #expect(shown(["/test-homes/me/a/b"], showing: "/test-homes/me/a/b") == "/test-homes/me/a")
     }
 
     @Test("Trashing an ancestor returns its parent, which may be the root itself")
     func trashedAncestor() {
-        #expect(shown(["/Users/me/a"], showing: "/Users/me/a/b/c") == "/Users/me")
+        #expect(shown(["/test-homes/me/a"], showing: "/test-homes/me/a/b/c") == "/test-homes/me")
     }
 
     @Test("Multiple trashed folders return the shallowest folder's parent regardless of array order")
     func shallowestWins() {
-        #expect(shown(["/Users/me/a/b", "/Users/me/a"], showing: "/Users/me/a/b/c") == "/Users/me")
-        #expect(shown(["/Users/me/a", "/Users/me/a/b"], showing: "/Users/me/a/b/c") == "/Users/me")
+        #expect(shown(["/test-homes/me/a/b", "/test-homes/me/a"], showing: "/test-homes/me/a/b/c") == "/test-homes/me")
+        #expect(shown(["/test-homes/me/a", "/test-homes/me/a/b"], showing: "/test-homes/me/a/b/c") == "/test-homes/me")
     }
 
     @Test("Returns nil for siblings, descendants only, name prefixes only, empty input, roots, and an empty roots list")
     func unrelatedIsNil() {
-        #expect(shown(["/Users/me/a/x"], showing: "/Users/me/a/b") == nil)
-        #expect(shown(["/Users/me/a/b/c"], showing: "/Users/me/a/b") == nil)
-        #expect(shown(["/Users/me/a/b"], showing: "/Users/me/a/b2") == nil)
-        #expect(shown([], showing: "/Users/me/a/b") == nil)
-        #expect(shown(["/Users/me"], showing: "/Users/me/a") == nil)
-        #expect(shown(["/Users/me/a/b"], showing: "/Users/me/a/b", roots: []) == nil)
+        #expect(shown(["/test-homes/me/a/x"], showing: "/test-homes/me/a/b") == nil)
+        #expect(shown(["/test-homes/me/a/b/c"], showing: "/test-homes/me/a/b") == nil)
+        #expect(shown(["/test-homes/me/a/b"], showing: "/test-homes/me/a/b2") == nil)
+        #expect(shown([], showing: "/test-homes/me/a/b") == nil)
+        #expect(shown(["/test-homes/me"], showing: "/test-homes/me/a") == nil)
+        #expect(shown(["/test-homes/me/a/b"], showing: "/test-homes/me/a/b", roots: []) == nil)
     }
 
     @Test("Trailing slashes and .. path representations produce the same result")
     func standardizesPaths() {
-        #expect(shown(["/Users/me/a/b/"], showing: "/Users/me/a/b") == "/Users/me/a")
-        #expect(shown(["/Users/me/a/b"], showing: "/Users/me/a/b/") == "/Users/me/a")
-        #expect(shown(["/Users/me/a/x/../b"], showing: "/Users/me/a/b/c") == "/Users/me/a")
-        #expect(shown(["/Users/me/a/b"], showing: "/Users/me/a/x/../b") == "/Users/me/a")
+        #expect(shown(["/test-homes/me/a/b/"], showing: "/test-homes/me/a/b") == "/test-homes/me/a")
+        #expect(shown(["/test-homes/me/a/b"], showing: "/test-homes/me/a/b/") == "/test-homes/me/a")
+        #expect(shown(["/test-homes/me/a/x/../b"], showing: "/test-homes/me/a/b/c") == "/test-homes/me/a")
+        #expect(shown(["/test-homes/me/a/b"], showing: "/test-homes/me/a/x/../b") == "/test-homes/me/a")
     }
 
     // MARK: - Vanished Displayed Folder (FR-042, EC-13)
@@ -140,14 +140,14 @@ struct FolderNavigationTests {
 
     @Test("Keeps a vanished folder inside the deepest root that contains it")
     func staysInsideRoot() {
-        let roots = [folder("/"), folder("/Users/me"), folder("/Volumes/Ext")]
+        let roots = [folder("/"), folder("/test-homes/me"), folder("/Volumes/Ext")]
         func stays(_ from: String, _ to: String, roots custom: [URL]? = nil) -> Bool {
             FolderNavigation.staysInsideRoot(from: folder(from), to: folder(to), roots: custom ?? roots)
         }
         #expect(stays("/Volumes/Ext/a/b", "/Volumes/Ext"))
         #expect(stays("/Volumes/Ext/a/b", "/Volumes/Ext/a"))
         #expect(!stays("/Volumes/Ext/a/b", "/Volumes"))
-        #expect(!stays("/Users/me/a", "/Users"))
+        #expect(!stays("/test-homes/me/a", "/test-homes"))
         #expect(stays("/opt/a", "/opt"))
         #expect(stays("/a/b", "/a", roots: []))
     }

@@ -4,7 +4,7 @@ import Testing
 
 @Suite("SearchRootInput and the parent input generation")
 struct SearchRootInputTests {
-    private let home = URL(fileURLWithPath: "/Users/me", isDirectory: true)
+    private let home = URL(fileURLWithPath: "/test-homes/me", isDirectory: true)
 
     private func requireValue<T>(_ value: T?) throws -> T {
         try #require(value)
@@ -16,22 +16,22 @@ struct SearchRootInputTests {
 
     @Test("typed uses existing parsing rules while picked preserves trailing whitespace")
     func resolvesTypedAndPicked() {
-        #expect(SearchRootInput.typed(" ~/a/b ").resolvedInput(home: home) == .success(standardized("/Users/me/a/b")))
+        #expect(SearchRootInput.typed(" ~/a/b ").resolvedInput(home: home) == .success(standardized("/test-homes/me/a/b")))
         #expect(SearchRootInput.typed("/a/b/").resolvedInput(home: home) == .success(standardized("/a/b")))
         #expect(SearchRootInput.typed("  ").resolvedInput(home: home) == .failure(.empty))
         #expect(SearchRootInput.typed("a/b").resolvedInput(home: home) == .failure(.notAbsolute))
 
         #expect(SearchRootInput.typed(" ~/a/b ").displayText == " ~/a/b ")
 
-        let picked = URL(fileURLWithPath: "/Users/me/Photos ", isDirectory: true)
-        #expect(SearchRootInput.picked(picked).displayText == "/Users/me/Photos ")
+        let picked = URL(fileURLWithPath: "/test-homes/me/Photos ", isDirectory: true)
+        #expect(SearchRootInput.picked(picked).displayText == "/test-homes/me/Photos ")
         #expect(SearchRootInput.picked(picked).resolvedInput(home: home) == .success(picked))
-        #expect(SearchRootInput.picked(picked).resolvedInput(home: home) != .success(standardized("/Users/me/Photos")))
+        #expect(SearchRootInput.picked(picked).resolvedInput(home: home) != .success(standardized("/test-homes/me/Photos")))
     }
 
     @Test("Only editing the root field resets the source to typed; editing the keyword and closing do not")
     func inputSourceTransitions() {
-        let picked = URL(fileURLWithPath: "/Users/me/Photos ", isDirectory: true)
+        let picked = URL(fileURLWithPath: "/test-homes/me/Photos ", isDirectory: true)
         var state = SearchPanelInputState(rootInput: .picked(picked), keyword: "hit")
         #expect(state.isActive)
         #expect(state.revision == 0)
@@ -42,14 +42,14 @@ struct SearchRootInputTests {
         #expect(state.keyword == "cats")
         #expect(state.revision == 1)
 
-        state.updateRootText("/Users/me/Photos ")
-        #expect(state.rootInput == .typed("/Users/me/Photos "))
-        #expect(state.displayText == "/Users/me/Photos ")
+        state.updateRootText("/test-homes/me/Photos ")
+        #expect(state.rootInput == .typed("/test-homes/me/Photos "))
+        #expect(state.displayText == "/test-homes/me/Photos ")
         #expect(state.revision == 2)
 
         var pickedState = SearchPanelInputState(rootInput: .picked(picked))
-        pickedState.applyPickedRoot(URL(fileURLWithPath: "/Users/me/other", isDirectory: true))
-        #expect(pickedState.rootInput == .picked(URL(fileURLWithPath: "/Users/me/other", isDirectory: true)))
+        pickedState.applyPickedRoot(URL(fileURLWithPath: "/test-homes/me/other", isDirectory: true))
+        #expect(pickedState.rootInput == .picked(URL(fileURLWithPath: "/test-homes/me/other", isDirectory: true)))
         #expect(pickedState.revision == 1)
 
         pickedState.close()
@@ -147,7 +147,7 @@ struct SearchRootInputTests {
     @Test("Post-confirmation validation captures the selected URL and allows applying picked only after success")
     func selectionValidationTickets() throws {
         var state = SearchPanelInputState(rootInput: .typed("/start"), keyword: "hit")
-        let url = URL(fileURLWithPath: "/Users/me/Photos ", isDirectory: true)
+        let url = URL(fileURLWithPath: "/test-homes/me/Photos ", isDirectory: true)
         let ticket = try requireValue(state.beginSelectionValidation(url, panelPresented: false))
         #expect(ticket.operation == .validatingSelection)
         #expect(ticket.selection == url)
@@ -162,7 +162,7 @@ struct SearchRootInputTests {
 
         state.applyPickedRoot(url)
         #expect(state.rootInput == .picked(url))
-        #expect(state.displayText == "/Users/me/Photos ")
+        #expect(state.displayText == "/test-homes/me/Photos ")
 
         let failed = try requireValue(state.beginSelectionValidation(url, panelPresented: false))
         let failedAdopted = state.complete(failed, succeeded: false)

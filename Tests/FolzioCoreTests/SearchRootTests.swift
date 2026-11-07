@@ -5,7 +5,7 @@ import Testing
 
 @Suite("SearchRoot")
 struct SearchRootTests {
-    private let home = URL(fileURLWithPath: "/Users/me", isDirectory: true)
+    private let home = URL(fileURLWithPath: "/test-homes/me", isDirectory: true)
 
     private func parsedPath(_ input: String) -> String? {
         try? SearchRoot.parse(input, home: home).get().path
@@ -15,8 +15,8 @@ struct SearchRootTests {
     func parse() {
         #expect(SearchRoot.parse("", home: home) == .failure(.empty))
         #expect(SearchRoot.parse("  ", home: home) == .failure(.empty))
-        #expect(parsedPath("~") == "/Users/me")
-        #expect(parsedPath(" ~/a/b ") == "/Users/me/a/b")
+        #expect(parsedPath("~") == "/test-homes/me")
+        #expect(parsedPath(" ~/a/b ") == "/test-homes/me/a/b")
         #expect(parsedPath("/a/b/") == "/a/b")
         #expect(parsedPath("/") == "/")
         #expect(parsedPath("/a/./b/../c") == "/a/c")

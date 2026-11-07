@@ -4,7 +4,7 @@ import Testing
 
 @Suite("SearchFolderInitialLocation Candidate Order")
 struct SearchFolderInitialLocationTests {
-    private let home = URL(fileURLWithPath: "/Users/me", isDirectory: true)
+    private let home = URL(fileURLWithPath: "/test-homes/me", isDirectory: true)
 
     private func directory(_ path: String) -> URL {
         URL(fileURLWithPath: path, isDirectory: true)
@@ -63,8 +63,8 @@ struct SearchFolderInitialLocationTests {
 
     @Test("Skips a failed input parse and uses the default path verbatim without trimming")
     func skipsInvalidInputAndKeepsTrailingSpace() async {
-        let spaced = directory("/Users/me/Photos ")
-        let plain = directory("/Users/me/Photos")
+        let spaced = directory("/test-homes/me/Photos ")
+        let plain = directory("/test-homes/me/Photos")
         let recorder = ValidationRecorder(successes: [spaced])
 
         let result = await SearchFolderInitialLocation.resolve(

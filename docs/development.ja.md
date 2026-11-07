@@ -46,15 +46,18 @@ swift run FolzioApp
 
 ```bash
 swift build
-swift test
+swift test --no-parallel --skip FolzioPerformanceTests
+swift test --filter FolzioPerformanceTests
 ```
 
-- `swift test` は `FolzioCoreTests`（Core のロジック・異常系・FSEvents）と
-  `FolzioPerformanceTests`（性能基準）を実行します
+- 1つ目のテストコマンドは `FolzioCoreTests`（Core のロジック・異常系・FSEvents）と
+  `FolzioAppTests`（AppKit UI とアプリ内の連携）を実行します。2つ目は `FolzioPerformanceTests`
+  （性能基準）を実行します。性能テストは、ほかのテストと処理能力を奪い合わないよう分けて実行します。
 - 個別に実行する場合:
 
 ```bash
 swift test --filter FolzioCoreTests
+swift test --filter FolzioAppTests
 swift test --filter FolzioPerformanceTests
 ```
 
@@ -145,7 +148,8 @@ Sources/
   FixtureKit/             # テスト用メディア生成（画像・GIF・WebP・動画）
   make-fixtures/          # フィクスチャ生成 CLI
 Tests/
-  FolzioCoreTests/         # Swift Testing
+  FolzioCoreTests/         # Core のロジックと異常系
+  FolzioAppTests/          # AppKit UI とアプリ内の連携
   FolzioPerformanceTests/  # 性能基準
 scripts/
   make-app.sh              # .app の組み立てと署名
@@ -162,6 +166,7 @@ scripts/
 - `FolzioCore` は AppKit を import しません。判断ロジックは Core、描画と入力は App に置きます
 - デコード・ディレクトリ列挙・ファイル操作は UI スレッドで行いません
 - Core のロジックと異常系には Swift Testing のテストを付けます
+- AppKit UI とアプリ内の連携の回帰テストは `FolzioAppTests` に置きます
 
 ## トラブルシューティング
 

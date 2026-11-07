@@ -40,7 +40,11 @@ chmod +x "$app/Contents/MacOS/Folzio"
 
 cp .build/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 
-localization_bundle="$bin_dir/Folzio_FolzioLocalization.bundle/Contents/Resources"
+localization_bundle="$bin_dir/Folzio_FolzioLocalization.bundle"
+# SwiftPM 6.0 uses a flat bundle; newer toolchains may use Contents/Resources.
+if [[ -d "$localization_bundle/Contents/Resources" ]]; then
+    localization_bundle="$localization_bundle/Contents/Resources"
+fi
 for language in ja en; do
     source_dir="$localization_bundle/$language.lproj"
     if [ ! -f "$source_dir/Localizable.strings" ] || [ ! -f "$source_dir/Localizable.stringsdict" ]; then

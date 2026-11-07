@@ -129,6 +129,20 @@ struct NameValidationTests {
         #expect(uniqueName(for: "c 2.jpg", existingNames: ["c 2.jpg", "c 3.jpg"]) == "c 4.jpg")
     }
 
+    @Test("Continues counters beyond the integer limit and skips collisions")
+    func continuesLargeCounters() {
+        let max = "9223372036854775807"
+        let next = "9223372036854775808"
+        #expect(uniqueName(for: "photo \(max).jpg", existingNames: []) == "photo \(next).jpg")
+        #expect(uniqueName(for: "photo 9223372036854775806.jpg", existingNames: ["PHOTO \(max).JPG"]) == "photo \(next).jpg")
+        #expect(uniqueName(for: "photo \(next)", existingNames: ["photo 9223372036854775809"]) == "photo 9223372036854775810")
+        #expect(uniqueName(for: "photo \(max).jpg", existingNames: ["photo \(next).jpg", "photo 9223372036854775809.jpg"]) == "photo 9223372036854775810.jpg")
+        #expect(uniqueName(for: "photo 999999999999999999999.jpg", existingNames: []) == "photo 1000000000000000000000.jpg")
+        #expect(uniqueName(for: "photo 0009.jpg", existingNames: []) == "photo 10.jpg")
+        #expect(uniqueName(for: "photo 000.jpg", existingNames: []) == "photo 1.jpg")
+        #expect(uniqueName(for: "photo １２.jpg", existingNames: []) == "photo １２ 2.jpg")
+    }
+
     @Test("Detects conflicts without case sensitivity")
     func detectsCaseInsensitiveCollisions() {
         #expect(uniqueName(for: "a.jpg", existingNames: ["A.JPG"]) == "a 2.jpg")

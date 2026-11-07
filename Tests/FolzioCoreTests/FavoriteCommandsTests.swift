@@ -51,7 +51,7 @@ struct FavoriteCommandsTests {
 
     @Test("Copy as Pathname is offered for every row role except the heading (FR-182)")
     func copyPathnameInContextMenus() {
-        let roots = [URL(fileURLWithPath: "/Users/me")]
+        let roots = [URL(fileURLWithPath: "/test-homes/me")]
         for role in [TreeItemRole.folder(folder), .favorite(registered)] {
             #expect(FavoriteCommands.contextMenu(for: role, roots: roots).contains(.copyPathname))
         }
@@ -62,10 +62,10 @@ struct FavoriteCommandsTests {
 
     @Test("renameTarget returns favorites and non-root folders; roots, headings, and no selection return nil (FR-099, FR-103)")
     func renameTargetForFavoriteAndFolder() {
-        let a = URL(fileURLWithPath: "/Users/me/a")
+        let a = URL(fileURLWithPath: "/test-homes/me/a")
         #expect(FavoriteCommands.renameTarget(.favorite(a), roots: roots) == .favorite(a))
         #expect(FavoriteCommands.renameTarget(.folder(a), roots: roots) == .folder(a))
-        #expect(FavoriteCommands.renameTarget(.folder(URL(fileURLWithPath: "/Users/me")), roots: roots) == nil)
+        #expect(FavoriteCommands.renameTarget(.folder(URL(fileURLWithPath: "/test-homes/me")), roots: roots) == nil)
         #expect(FavoriteCommands.renameTarget(.folder(URL(fileURLWithPath: "/")), roots: roots) == nil)
         #expect(FavoriteCommands.renameTarget(.favoritesHeader, roots: roots) == nil)
         #expect(FavoriteCommands.renameTarget(nil, roots: roots) == nil)
@@ -75,8 +75,8 @@ struct FavoriteCommandsTests {
 
     @Test("Rename is absent from .folder menus including roots and from heading menus")
     func renameFavoriteIsOnlyInFavoriteMenu() {
-        let a = URL(fileURLWithPath: "/Users/me/a")
-        let root = URL(fileURLWithPath: "/Users/me")
+        let a = URL(fileURLWithPath: "/test-homes/me/a")
+        let root = URL(fileURLWithPath: "/test-homes/me")
         #expect(!FavoriteCommands.contextMenu(for: .folder(a), roots: roots).contains(.renameFavorite))
         #expect(!FavoriteCommands.contextMenu(for: .folder(root), roots: roots).contains(.renameFavorite))
         #expect(!FavoriteCommands.contextMenu(for: .folder(a)).contains(.renameFavorite))
@@ -99,11 +99,11 @@ struct FavoriteCommandsTests {
 
     // MARK: Moving Tree Folders to the Trash (FR-079)
 
-    private let roots = [URL(fileURLWithPath: "/"), URL(fileURLWithPath: "/Users/me")]
+    private let roots = [URL(fileURLWithPath: "/"), URL(fileURLWithPath: "/test-homes/me")]
 
     @Test("trashTarget returns regular folder URLs, including folders under volumes whose roots contain /")
     func trashTargetForOrdinaryFolder() {
-        let home = URL(fileURLWithPath: "/Users/me/a")
+        let home = URL(fileURLWithPath: "/test-homes/me/a")
         let volume = URL(fileURLWithPath: "/Volumes/Ext/a")
         #expect(FavoriteCommands.trashTarget(.folder(home), roots: roots) == home)
         #expect(FavoriteCommands.trashTarget(.folder(volume), roots: roots) == volume)
@@ -111,10 +111,10 @@ struct FavoriteCommandsTests {
 
     @Test("trashTarget is nil for roots, favorites, headings, no selection, and an empty roots list")
     func trashTargetIsNilForOthers() {
-        let a = URL(fileURLWithPath: "/Users/me/a")
-        #expect(FavoriteCommands.trashTarget(.folder(URL(fileURLWithPath: "/Users/me")), roots: roots) == nil)
+        let a = URL(fileURLWithPath: "/test-homes/me/a")
+        #expect(FavoriteCommands.trashTarget(.folder(URL(fileURLWithPath: "/test-homes/me")), roots: roots) == nil)
         #expect(FavoriteCommands.trashTarget(.folder(URL(fileURLWithPath: "/")), roots: roots) == nil)
-        #expect(FavoriteCommands.trashTarget(.folder(URL(fileURLWithPath: "/Users/me/")), roots: roots) == nil)
+        #expect(FavoriteCommands.trashTarget(.folder(URL(fileURLWithPath: "/test-homes/me/")), roots: roots) == nil)
         #expect(FavoriteCommands.trashTarget(.favorite(a), roots: roots) == nil)
         #expect(FavoriteCommands.trashTarget(.favoritesHeader, roots: roots) == nil)
         #expect(FavoriteCommands.trashTarget(nil, roots: roots) == nil)
@@ -123,7 +123,7 @@ struct FavoriteCommandsTests {
 
     @Test("Regular folder context menus place Move to Trash and Rename before their respective separators (A-37)")
     func contextMenuForOrdinaryFolderHasTrashAndRename() {
-        let a = URL(fileURLWithPath: "/Users/me/a")
+        let a = URL(fileURLWithPath: "/test-homes/me/a")
         #expect(
             FavoriteCommands.contextMenu(for: .folder(a), roots: roots)
                 == [
@@ -141,8 +141,8 @@ struct FavoriteCommandsTests {
                 .newFolder, .separator,
                 .pasteHere, .movePasteHere, .separator, .addToFavorites, .separator, .copyPathname, .revealInFinder,
             ]
-        let a = URL(fileURLWithPath: "/Users/me/a")
-        #expect(FavoriteCommands.contextMenu(for: .folder(URL(fileURLWithPath: "/Users/me")), roots: roots) == plain)
+        let a = URL(fileURLWithPath: "/test-homes/me/a")
+        #expect(FavoriteCommands.contextMenu(for: .folder(URL(fileURLWithPath: "/test-homes/me")), roots: roots) == plain)
         #expect(FavoriteCommands.contextMenu(for: .folder(a)) == plain)
         #expect(
             FavoriteCommands.contextMenu(for: .favorite(a), roots: roots)
@@ -154,7 +154,7 @@ struct FavoriteCommandsTests {
 
     @Test("newFolderTarget returns the folder for regular folders, roots, and favorites, and nil otherwise (FR-208)")
     func newFolderTargetRoles() {
-        let root = URL(fileURLWithPath: "/Users/me")
+        let root = URL(fileURLWithPath: "/test-homes/me")
         #expect(FavoriteCommands.newFolderTarget(.folder(folder)) == folder)
         #expect(FavoriteCommands.newFolderTarget(.folder(root)) == root)
         #expect(FavoriteCommands.newFolderTarget(.favorite(registered)) == registered)
@@ -164,8 +164,8 @@ struct FavoriteCommandsTests {
 
     @Test("New Folder comes first, followed by a separator, in folder, root, and favorite menus only (FR-208)")
     func newFolderLeadsContextMenus() {
-        let a = URL(fileURLWithPath: "/Users/me/a")
-        let root = URL(fileURLWithPath: "/Users/me")
+        let a = URL(fileURLWithPath: "/test-homes/me/a")
+        let root = URL(fileURLWithPath: "/test-homes/me")
         for role in [TreeItemRole.folder(a), .folder(root), .favorite(registered)] {
             let items = FavoriteCommands.contextMenu(for: role, roots: roots)
             #expect(Array(items.prefix(2)) == [.newFolder, .separator])

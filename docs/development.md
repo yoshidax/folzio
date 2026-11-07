@@ -46,15 +46,18 @@ are tied to the terminal app.
 
 ```bash
 swift build
-swift test
+swift test --no-parallel --skip FolzioPerformanceTests
+swift test --filter FolzioPerformanceTests
 ```
 
-- `swift test` runs `FolzioCoreTests` (Core logic, error cases, FSEvents) and
-  `FolzioPerformanceTests` (performance baselines)
+- The first test command runs `FolzioCoreTests` (Core logic, error cases, FSEvents) and
+  `FolzioAppTests` (AppKit UI and app coordination). The second runs `FolzioPerformanceTests`
+  (performance baselines). Run performance tests separately to avoid contention with other tests.
 - To run them individually:
 
 ```bash
 swift test --filter FolzioCoreTests
+swift test --filter FolzioAppTests
 swift test --filter FolzioPerformanceTests
 ```
 
@@ -145,7 +148,8 @@ Sources/
   FixtureKit/             # Test media generation (images, GIF, WebP, video)
   make-fixtures/          # Fixture generation CLI
 Tests/
-  FolzioCoreTests/         # Swift Testing
+  FolzioCoreTests/         # Core logic and error cases
+  FolzioAppTests/          # AppKit UI and app coordination
   FolzioPerformanceTests/  # Performance baselines
 scripts/
   make-app.sh              # Assembles and signs the .app
@@ -162,6 +166,7 @@ Design rules:
 - `FolzioCore` does not import AppKit. Decision logic lives in Core, and drawing and input live in App
 - Decoding, directory enumeration, and file operations never run on the UI thread
 - Core logic and error cases are covered by Swift Testing tests
+- AppKit UI and app coordination regressions are tested in `FolzioAppTests`
 
 ## Troubleshooting
 
