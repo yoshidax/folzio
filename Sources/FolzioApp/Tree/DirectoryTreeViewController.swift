@@ -1058,7 +1058,7 @@ final class DirectoryTreeViewController: NSViewController {
         }
         outlineView.registerForDraggedTypes([.fileURL])
         outlineView.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
-        outlineView.setDraggingSourceOperationMask(.copy, forLocal: false)
+        outlineView.setDraggingSourceOperationMask(ExternalDrag.sourceOperationMaskOutsideApp, forLocal: false)
         InternalDrag.register(outlineView)
         outlineView.menu = makeContextMenu()
         outlineView.target = self
@@ -1755,15 +1755,17 @@ extension DirectoryTreeViewController: NSOutlineViewDataSource {
         pendingOperationSources = draggedItems.compactMap { ($0 as? Node)?.url }
     }
 
-    /// A drag that ends without a drop (cancelled or refused) starts no operation, so forget its folders. A drop is
-    /// finished by `didFinishOperation(sources:removed:)` (FR-219).
+    /// A drag that ends without a drop (cancelled or refused), or with a drop outside the app, starts no operation in
+    /// this app, so forget its folders. A drop on this app's views is finished by `didFinishOperation(sources:removed:)`
+    /// (FR-219). For a drop outside the app, the destination app performs the operation and this app deletes nothing;
+    /// file system events show the result (FR-344, EC-236).
     func outlineView(
         _ outlineView: NSOutlineView,
         draggingSession session: NSDraggingSession,
         endedAt screenPoint: NSPoint,
         operation: NSDragOperation
     ) {
-        if operation.isEmpty {
+        if operation.isEmpty || !InternalDrag.wasAccepted(session.draggingSequenceNumber) {
             pendingOperationSources = []
         }
     }
@@ -1774,47 +1776,31 @@ extension DirectoryTreeViewController: NSOutlineViewDataSource {
         return node.url as NSURL
     }
 
+    /// The folder a drop on `item` goes into, for drags inside the app and from other apps alike: a real folder row
+    /// (including the home folder and volume roots) or an available favorite (FR-163, FR-345). The Favorites heading,
+    /// missing favorites, and unreadable folders take no drops.
+    private func dropDestination(for item: Any?) -> URL? {
+        if let node = item as? Node, node.folder.accessState != .denied { return node.url }
+        if let favorite = item as? FavoriteEntry, favorite.availability == .available { return favorite.url }
+        return nil
+    }
+
     func outlineView(
         _ outlineView: NSOutlineView,
         validateDrop info: any NSDraggingInfo,
         proposedItem item: Any?,
         proposedChildIndex index: Int
     ) -> NSDragOperation {
+        // Drops go onto a folder row, not between rows (FR-163).
+        guard index == NSOutlineViewDropOnItemIndex, let destination = dropDestination(for: item) else { return [] }
+        let operation: NSDragOperation
         if InternalDrag.urls(info) != nil {
-            guard index == NSOutlineViewDropOnItemIndex else { return [] }
-            let destination: URL
-            if let node = item as? Node, node.folder.accessState != .denied {
-                destination = node.url
-            } else if let favorite = item as? FavoriteEntry, favorite.availability == .available {
-                destination = favorite.url
-            } else { return [] }
-            let operation = InternalDrag.operation(info, destination: destination)
-            if !operation.isEmpty { outlineView.setDropItem(item, dropChildIndex: NSOutlineViewDropOnItemIndex) }
-            return operation
+            operation = InternalDrag.operation(info, destination: destination)
+        } else {
+            operation = ExternalDrag.operation(info, destination: destination)
         }
-        // Existing behavior for external drags.
-        guard let role = role(for: item), FavoriteCommands.acceptsFiles(role) else { return [] }
-        guard let node = item as? Node,
-              node.folder.accessState != .denied,
-              let urls = fileURLs(from: info.draggingPasteboard) else {
-            return []
-        }
-        // A folder cannot be dropped onto itself or a descendant (spec Edge Cases, R32).
-        let destination = node.url.standardizedFileURL.pathComponents
-        if urls.contains(where: { destination.starts(with: $0.standardizedFileURL.pathComponents) }) {
-            return []
-        }
-
-        outlineView.setDropItem(node, dropChildIndex: NSOutlineViewDropOnItemIndex)
-
-        let mask = info.draggingSourceOperationMask
-        let preferred: NSDragOperation = NSEvent.modifierFlags.contains(.option)
-            ? .copy
-            : .move
-        if mask.contains(preferred) {
-            return preferred
-        }
-        return mask.contains(.copy) ? .copy : []
+        if !operation.isEmpty { outlineView.setDropItem(item, dropChildIndex: NSOutlineViewDropOnItemIndex) }
+        return operation
     }
 
     func outlineView(
@@ -1823,56 +1809,22 @@ extension DirectoryTreeViewController: NSOutlineViewDataSource {
         item: Any?,
         childIndex index: Int
     ) -> Bool {
+        guard index == NSOutlineViewDropOnItemIndex, let destination = dropDestination(for: item) else { return false }
         if let urls = InternalDrag.urls(info) {
-            guard index == NSOutlineViewDropOnItemIndex else { return false }
-            let destination: URL
-            if let node = item as? Node, node.folder.accessState != .denied {
-                destination = node.url
-            } else if let favorite = item as? FavoriteEntry, favorite.availability == .available {
-                destination = favorite.url
-            } else { return false }
             guard !InternalDrag.operation(info, destination: destination).isEmpty else { return false }
             let copy = NSEvent.modifierFlags.contains(.option)
+            InternalDrag.markAccepted(info.draggingSequenceNumber)
             Task { @MainActor in
-                await coordinator.internalDrop(urls, to: destination, copy: copy)
+                await coordinator.drop(urls, to: destination, copy: copy)
             }
             return true
         }
-        guard let role = role(for: item), FavoriteCommands.acceptsFiles(role) else { return false }
-        guard let node = item as? Node,
-              node.folder.accessState != .denied,
-              let urls = fileURLs(from: info.draggingPasteboard),
-              !urls.isEmpty else {
-            return false
-        }
-
-        let destination = node.url
-        let shouldCopy = NSEvent.modifierFlags.contains(.option)
+        // A drop from another app, such as Finder: move or copy by the Finder rules (FR-346, FR-347).
+        guard let drop = ExternalDrag.dropOperation(info, destination: destination) else { return false }
         Task { @MainActor in
-            if shouldCopy {
-                await coordinator.copy(urls, to: destination)
-            } else {
-                await coordinator.move(urls, to: destination)
-            }
+            await coordinator.drop(drop.urls, to: destination, copy: drop.kind == .copy)
         }
         return true
-    }
-
-    private func fileURLs(from pasteboard: NSPasteboard) -> [URL]? {
-        let options: [NSPasteboard.ReadingOptionKey: Any] = [
-            .urlReadingFileURLsOnly: true,
-        ]
-        guard pasteboard.canReadObject(
-            forClasses: [NSURL.self],
-            options: options
-        ) else {
-            return nil
-        }
-        let objects = pasteboard.readObjects(
-            forClasses: [NSURL.self],
-            options: options
-        ) as? [NSURL]
-        return objects?.map { $0 as URL }
     }
 }
 

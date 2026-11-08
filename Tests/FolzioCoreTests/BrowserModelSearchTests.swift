@@ -1412,6 +1412,53 @@ struct BrowserModelSearchTests {
         #expect(env.model.isShowingSearchResults)
     }
 
+    @Test("A folder moved away outside the app also hides late results of its other files until a new search (TAK-74, EC-236)")
+    func externallyMovedFolderHidesLateResults() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let moved = try env.makeResult("trip/day1/cat.jpg")
+        let kept = try env.makeResult("trip/day2/dog.jpg")
+        env.model.startSearch(pattern(), root: env.root)
+        await send([moved, kept], env, expecting: 2)
+
+        let outside = env.folder("moved/day1")
+        try FileManager.default.createDirectory(at: outside.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: env.folder("trip/day1"), to: outside)
+        await env.model.handleFileSystemEvent([env.folder("trip")])
+        #expect(names(env.model) == ["dog.jpg"])
+
+        // A late result for another file of the moved folder, from the enumeration of the old location. It is not
+        // the removed row itself, so only recording the folder hides it.
+        let late = Env.result(env.url("trip/day1/bird.jpg"))
+        env.searcher.send([late])
+        await finish(env)
+        #expect(names(env.model) == ["dog.jpg"])
+
+        // A new search forgets the record.
+        env.model.startSearch(pattern(), root: env.root)
+        await send([late], env, expecting: 1)
+        #expect(names(env.model) == ["bird.jpg"])
+    }
+
+    @Test("A file removed outside the app hides only that file, not later results of its folder (TAK-74, EC-236)")
+    func externallyRemovedFileKeepsFolderResults() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let removed = try env.makeResult("trip/day2/a.jpg")
+        let kept = try env.makeResult("trip/day2/c.jpg")
+        env.model.startSearch(pattern(), root: env.root)
+        await send([removed, kept], env, expecting: 2)
+
+        try FileManager.default.removeItem(at: removed.url)
+        await env.model.handleFileSystemEvent([env.folder("trip/day2")])
+        #expect(names(env.model) == ["c.jpg"])
+
+        let late = try env.makeResult("trip/day2/b.jpg")
+        await send([late], env, expecting: 2)
+        await finish(env)
+        #expect(Set(names(env.model)) == ["b.jpg", "c.jpg"])
+    }
+
     @Test("Duplicating a folder row does not add the duplicate folder to results")
     func copiedFolderIsNotAdded() async throws {
         let env = try makeEnv()

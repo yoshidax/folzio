@@ -125,7 +125,9 @@ final class ListModeView: NSView {
     /// Commits the name of a folder created with New Folder, without the rename confirmation (FR-211).
     var onRenameNewFolder: ((URL, String) async -> Void)?
     var onOpenItem: ((URL) -> Void)?
-    var onInternalDrop: (([URL], URL, Bool) -> Void)?
+    /// A drop on a folder item, from this app's views or from another app: the URLs, the destination folder, and
+    /// whether to copy (FR-020, FR-345, FR-346).
+    var onDrop: (([URL], URL, Bool) -> Void)?
     /// Esc. Returns true when handled (ends search results; FR-086).
     var onEscape: (() -> Bool)? {
         get { tableView.onEscape }
@@ -260,7 +262,7 @@ final class ListModeView: NSView {
         tableView.registerForDraggedTypes([.fileURL])
         InternalDrag.register(tableView)
         tableView.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
-        tableView.setDraggingSourceOperationMask(.copy, forLocal: false)
+        tableView.setDraggingSourceOperationMask(ExternalDrag.sourceOperationMaskOutsideApp, forLocal: false)
         // Space toggles the Quick Look panel instead of video playback (FR-247, FR-248).
         tableView.onSpace = { [weak self] event in
             self?.quickLook?.handleSpace(event) ?? false
@@ -681,21 +683,47 @@ extension ListModeView: NSMenuItemValidation {
 }
 
 extension ListModeView: NSTableViewDataSource {
+    /// The destination of a drop on `row`: a folder row, or the displayed folder for the gaps between rows, empty
+    /// space, and rows that are not folders (FR-163, FR-349). Row -1 is the whole table, as set for a background drop.
+    private func dropTarget(row: Int, dropOperation: NSTableView.DropOperation) -> (destination: URL, row: Int?)? {
+        let files = model.listing.files
+        let onItem = dropOperation == .on && files.indices.contains(row)
+        guard let target = FileListDropTarget.resolve(
+            kind: onItem ? files[row].kind : nil,
+            index: onItem ? row : nil,
+            isBrowsingArchive: model.isBrowsingArchive,
+            isShowingSearchResults: model.isShowingSearchResults,
+            state: model.listing.state
+        ) else { return nil }
+        switch target {
+        case .folder(let index): return (files[index].url, index)
+        case .displayedFolder: return (model.listing.folder, nil)
+        }
+    }
+
     func tableView(_ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
-        guard dropOperation == .on, !model.isBrowsingArchive,
-              model.listing.files.indices.contains(row), model.listing.files[row].kind == .folder else { return [] }
-        let operation = InternalDrag.operation(info, destination: model.listing.files[row].url)
-        if !operation.isEmpty { tableView.setDropRow(row, dropOperation: .on) }
+        guard let target = dropTarget(row: row, dropOperation: dropOperation) else { return [] }
+        let operation = InternalDrag.urls(info) != nil
+            ? InternalDrag.operation(info, destination: target.destination)
+            : ExternalDrag.operation(info, destination: target.destination)
+        guard !operation.isEmpty else { return [] }
+        // A background drop highlights the whole table (row -1 with `.on`).
+        tableView.setDropRow(target.row ?? -1, dropOperation: .on)
         return operation
     }
 
     func tableView(_ tableView: NSTableView, acceptDrop info: any NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
-        guard dropOperation == .on, !model.isBrowsingArchive,
-              model.listing.files.indices.contains(row), model.listing.files[row].kind == .folder,
-              let urls = InternalDrag.urls(info) else { return false }
-        let destination = model.listing.files[row].url
-        guard !InternalDrag.operation(info, destination: destination).isEmpty else { return false }
-        onInternalDrop?(urls, destination, NSEvent.modifierFlags.contains(.option))
+        guard let target = dropTarget(row: row, dropOperation: dropOperation) else { return false }
+        let destination = target.destination
+        if let urls = InternalDrag.urls(info) {
+            guard !InternalDrag.operation(info, destination: destination).isEmpty else { return false }
+            InternalDrag.markAccepted(info.draggingSequenceNumber)
+            onDrop?(urls, destination, NSEvent.modifierFlags.contains(.option))
+            return true
+        }
+        // A drop from another app, such as Finder (FR-345, FR-346).
+        guard let drop = ExternalDrag.dropOperation(info, destination: destination) else { return false }
+        onDrop?(drop.urls, destination, drop.kind == .copy)
         return true
     }
 

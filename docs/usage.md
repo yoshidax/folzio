@@ -233,6 +233,8 @@ For a first look, see the [README](../README.md).
 
 - Drag a tree folder, or files and folders selected in either list view,
   onto a folder in the tree or the list (including search results) to move them.
+- Drop on the file list's background, or on a file that is not a folder, to move items into the displayed folder.
+  - While search results or the contents of a zip file are shown, only folders accept drops.
 - Hold ⌥ when dropping to copy instead.
 - Available favorites can be destinations.
 - These are rejected:
@@ -241,6 +243,19 @@ For a first look, see the [README](../README.md).
   - A transfer into the source folder or its descendants
 - A name conflict shows a dialog regardless of the settings.
 - When copying onto the source itself, choose Keep Both or Stop. Replace is unavailable.
+
+### Drag and Drop with Other Apps
+
+- Drag items from Folzio to a folder in Finder or to an upload field in a web browser.
+  - Finder decides whether to move or copy: on the same volume it moves, and on another volume it copies. Hold ⌥ to copy or ⌘ to move.
+  - To move a tree folder with ⌘, start dragging first and then press ⌘.
+  - Folzio shows no confirmation. To undo, use Undo in Finder.
+  - Dragging to the Trash in the Dock is not supported. Use ⌘Delete to move items to the Trash.
+- Drop items from Finder on a folder in Folzio or on the file list's background.
+  - The same rules as in Finder decide whether to move or copy: when every item is on the same volume it moves,
+    and otherwise it copies. Hold ⌥ to copy or ⌘ to move.
+  - The confirmation and conflict dialogs appear as for copies and moves inside Folzio.
+- Images from a web page (that are not files), links, and text from a web browser are not accepted.
 
 ### New Folders
 

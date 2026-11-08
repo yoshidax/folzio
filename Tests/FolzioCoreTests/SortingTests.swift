@@ -248,6 +248,58 @@ struct SortingTests {
         }
     }
 
+    @Test("resortRow matches sorted after one row's key changes, including ties")
+    func resortRowMatchesSorted() {
+        var generator = SeededGenerator(seed: 0x2E50_47ED)
+        let dates: [Date?] = [nil, Date(timeIntervalSince1970: 100), Date(timeIntervalSince1970: 200)]
+        // Few distinct names, sizes, and types so the changed row often ties with other rows on every column.
+        let names = ["a.jpg", "b.png", "img10.mp4", "img2.jpg", "Cat.mov"]
+        let sizes: [Int64] = [0, 10, 20]
+        let folders = ["/r/a", "/r/a2", "/r/b"]
+        let types = ["JPEG イメージ", "PNG イメージ", "ムービー"]
+        var serial = 0
+        func randomFile() -> MediaFile {
+            serial += 1
+            let name = names.randomElement(using: &generator)!
+            return MediaFile(
+                // The sequence number in the path identifies each row; no column compares it.
+                url: URL(fileURLWithPath: "\(folders.randomElement(using: &generator)!)/\(serial)/\(name)"),
+                name: name,
+                kind: Int.random(in: 0..<4, using: &generator) == 0
+                    ? .folder
+                    : .media(MediaKind(fileExtension: (name as NSString).pathExtension) ?? .jpeg),
+                typeDescription: types.randomElement(using: &generator)!,
+                creationDate: dates.randomElement(using: &generator)!,
+                fileSize: sizes.randomElement(using: &generator)!
+            )
+        }
+
+        for column in SortColumn.allCases where column != .location {
+            for ascending in [true, false] {
+                let order = SortOrder(column: column, ascending: ascending)
+                for _ in 0..<100 {
+                    var files = sorted((0..<Int.random(in: 1...40, using: &generator)).map { _ in randomFile() }, by: order)
+                    let index = Int.random(in: 0..<files.count, using: &generator)
+                    files[index].name = names.randomElement(using: &generator)!
+                    files[index].fileSize = sizes.randomElement(using: &generator)!
+                    let expected = sorted(files, by: order)
+                    resortRow(in: &files, at: index, by: order)
+                    #expect(files.map(\.url.path) == expected.map(\.url.path), "column=\(column) ascending=\(ascending)")
+                }
+            }
+        }
+    }
+
+    @Test("resortRow falls back to a full sort for a .. row and keeps it first")
+    func resortRowWithParentRow() {
+        let order = SortOrder(column: .name, ascending: true)
+        var files = [file("b.jpg"), item("..", .parent), file("a.jpg")]
+        let expected = sorted(files, by: order)
+        resortRow(in: &files, at: 1, by: order)
+        #expect(files.map(\.name) == expected.map(\.name))
+        #expect(files.map(\.name) == ["..", "a.jpg", "b.jpg"])
+    }
+
     @Test("sortedMerge also matches when either input is empty")
     func sortedMergeWithEmptySide() {
         let order = SortOrder(column: .name, ascending: true)

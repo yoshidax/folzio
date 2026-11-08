@@ -5,6 +5,27 @@ import Quartz
 
 @MainActor
 private final class ThumbnailCollectionView: NSCollectionView {
+    /// Shows that a drop goes into the displayed folder (the background), which `NSCollectionView` cannot show by
+    /// itself (FR-349, research.md R9). Drawn on the scroll view so it frames the visible area.
+    var showsBackgroundDropTarget = false {
+        didSet {
+            guard showsBackgroundDropTarget != oldValue, let scrollView = enclosingScrollView else { return }
+            scrollView.wantsLayer = true
+            scrollView.layer?.borderColor = NSColor.selectedContentBackgroundColor.cgColor
+            scrollView.layer?.borderWidth = showsBackgroundDropTarget ? 3 : 0
+        }
+    }
+
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        showsBackgroundDropTarget = false
+        super.draggingExited(sender)
+    }
+
+    override func draggingEnded(_ sender: any NSDraggingInfo) {
+        showsBackgroundDropTarget = false
+        super.draggingEnded(sender)
+    }
+
     var onSpace: ((NSEvent) -> Bool)?
     /// Takes control of the Quick Look panel while this view has the focus (FR-247, research.md R2).
     var quickLook: QuickLookCoordinator?
@@ -78,6 +99,20 @@ private final class ThumbnailCollectionView: NSCollectionView {
             }
         }
         super.keyDown(with: event)
+    }
+}
+
+/// Replaces the collection view's inter-item gap indicator, which marks where a dragged item would be inserted when
+/// reordering. The thumbnails are sorted and never reordered, and a background drop uses `.before` only so that no item
+/// is highlighted, so the indicator stays hidden (FR-349, research.md R9).
+private final class HiddenGapIndicator: NSView, NSCollectionViewElement {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        isHidden = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
     }
 }
 
@@ -360,6 +395,7 @@ final class ThumbnailModeView: NSView {
     }
 
     private static let itemIdentifier = NSUserInterfaceItemIdentifier("ThumbnailItem")
+    private static let gapIndicatorIdentifier = NSUserInterfaceItemIdentifier("ThumbnailGapIndicator")
     private static let spacing: CGFloat = 12
     private static let sectionInset = NSEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
 
@@ -438,7 +474,9 @@ final class ThumbnailModeView: NSView {
         return window.convertToScreen(source.convert(source.bounds, to: nil))
     }
 
-    var onInternalDrop: (([URL], URL, Bool) -> Void)?
+    /// A drop on a folder item, from this app's views or from another app: the URLs, the destination folder, and
+    /// whether to copy (FR-020, FR-345, FR-346).
+    var onDrop: (([URL], URL, Bool) -> Void)?
     /// Esc. Returns true when handled (ends search results; FR-086).
     var onEscape: (() -> Bool)? {
         get { collectionView.onEscape }
@@ -596,8 +634,14 @@ final class ThumbnailModeView: NSView {
             ThumbnailItemView.self,
             forItemWithIdentifier: Self.itemIdentifier
         )
+        collectionView.register(
+            HiddenGapIndicator.self,
+            forSupplementaryViewOfKind: NSCollectionView.elementKindInterItemGapIndicator,
+            withIdentifier: Self.gapIndicatorIdentifier
+        )
         collectionView.registerForDraggedTypes([.fileURL])
         collectionView.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
+        collectionView.setDraggingSourceOperationMask(ExternalDrag.sourceOperationMaskOutsideApp, forLocal: false)
         InternalDrag.register(collectionView)
         collectionView.onArrowKey = { [weak self] key, modifiers in
             self?.handleArrowKey(key, modifiers: modifiers) ?? false
@@ -1040,27 +1084,65 @@ final class ThumbnailModeView: NSView {
 }
 
 extension ThumbnailModeView: NSCollectionViewDataSource {
+    /// The destination of a drop on the item at `index`, or on empty space when `index` is nil: a folder item, or the
+    /// displayed folder for empty space and items that are not folders (FR-163, FR-349).
+    private func dropTarget(itemAt index: Int?) -> FileListDropTarget? {
+        let files = model.listing.files
+        let index = index.flatMap { files.indices.contains($0) ? $0 : nil }
+        return FileListDropTarget.resolve(
+            kind: index.map { files[$0].kind },
+            index: index,
+            isBrowsingArchive: model.isBrowsingArchive,
+            isShowingSearchResults: model.isShowingSearchResults,
+            state: model.listing.state
+        )
+    }
+
+    private func dropURL(for target: FileListDropTarget) -> URL {
+        switch target {
+        case .folder(let index): return model.listing.files[index].url
+        case .displayedFolder: return model.listing.folder
+        }
+    }
+
     func collectionView(_ collectionView: NSCollectionView, validateDrop info: any NSDraggingInfo, proposedIndexPath: AutoreleasingUnsafeMutablePointer<NSIndexPath>, dropOperation: UnsafeMutablePointer<NSCollectionView.DropOperation>) -> NSDragOperation {
         // The flow layout may propose `.before` near item edges, so resolve the target from the item under the
-        // pointer instead. Gaps and the background stay invalid (FR-163).
+        // pointer instead.
         let location = collectionView.convert(info.draggingLocation, from: nil)
-        guard !model.isBrowsingArchive,
-              let indexPath = collectionView.indexPathForItem(at: location) else { return [] }
-        let index = indexPath.item
-        guard model.listing.files.indices.contains(index), model.listing.files[index].kind == .folder else { return [] }
-        proposedIndexPath.pointee = indexPath as NSIndexPath
-        dropOperation.pointee = .on
-        return InternalDrag.operation(info, destination: model.listing.files[index].url)
+        guard let target = dropTarget(itemAt: collectionView.indexPathForItem(at: location)?.item) else {
+            self.collectionView.showsBackgroundDropTarget = false
+            return []
+        }
+        switch target {
+        case .folder(let index):
+            proposedIndexPath.pointee = IndexPath(item: index, section: 0) as NSIndexPath
+            dropOperation.pointee = .on
+        case .displayedFolder:
+            // `.before` keeps the item under the pointer from being highlighted; the frame shows the target instead.
+            dropOperation.pointee = .before
+        }
+        let destination = dropURL(for: target)
+        let operation = InternalDrag.urls(info) != nil
+            ? InternalDrag.operation(info, destination: destination)
+            : ExternalDrag.operation(info, destination: destination)
+        self.collectionView.showsBackgroundDropTarget = target == .displayedFolder && !operation.isEmpty
+        return operation
     }
 
     func collectionView(_ collectionView: NSCollectionView, acceptDrop info: any NSDraggingInfo, indexPath: IndexPath, dropOperation: NSCollectionView.DropOperation) -> Bool {
-        let index = indexPath.item
-        guard dropOperation == .on, !model.isBrowsingArchive,
-              model.listing.files.indices.contains(index), model.listing.files[index].kind == .folder,
-              let urls = InternalDrag.urls(info) else { return false }
-        let destination = model.listing.files[index].url
-        guard !InternalDrag.operation(info, destination: destination).isEmpty else { return false }
-        onInternalDrop?(urls, destination, NSEvent.modifierFlags.contains(.option))
+        self.collectionView.showsBackgroundDropTarget = false
+        // `.before` is a background drop (see `validateDrop`).
+        guard let target = dropTarget(itemAt: dropOperation == .on ? indexPath.item : nil) else { return false }
+        let destination = dropURL(for: target)
+        if let urls = InternalDrag.urls(info) {
+            guard !InternalDrag.operation(info, destination: destination).isEmpty else { return false }
+            InternalDrag.markAccepted(info.draggingSequenceNumber)
+            onDrop?(urls, destination, NSEvent.modifierFlags.contains(.option))
+            return true
+        }
+        // A drop from another app, such as Finder (FR-345, FR-346).
+        guard let drop = ExternalDrag.dropOperation(info, destination: destination) else { return false }
+        onDrop?(drop.urls, destination, drop.kind == .copy)
         return true
     }
 
@@ -1069,6 +1151,16 @@ extension ThumbnailModeView: NSCollectionViewDataSource {
         numberOfItemsInSection section: Int
     ) -> Int {
         model.listing.files.count
+    }
+
+    /// The only supplementary element is the inter-item gap indicator of a drag, which stays hidden (FR-349,
+    /// research.md R9).
+    func collectionView(
+        _ collectionView: NSCollectionView,
+        viewForSupplementaryElementOfKind kind: NSCollectionView.SupplementaryElementKind,
+        at indexPath: IndexPath
+    ) -> NSView {
+        collectionView.makeSupplementaryView(ofKind: kind, withIdentifier: Self.gapIndicatorIdentifier, for: indexPath)
     }
 
     func collectionView(

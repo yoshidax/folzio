@@ -19,7 +19,8 @@ macOS 15 or later · Apple silicon only · English and Japanese · Works locally
   with video autoplay and looping available. Press Space for Quick Look, or double-click to open a file in its default app.
 - **Organize while you browse.** Copy, move, duplicate, rename, and trash files and folders with familiar macOS
   shortcuts and drag and drop. Create folders on the spot, select several folders in the tree to move, copy,
-  or trash them at once, and copy the full path of a file or folder.
+  or trash them at once, and copy the full path of a file or folder. Drag and drop also works with Finder
+  and web browsers.
 - **Look inside zip archives.** Browse folders and preview images and videos inside zip files.
   Archive contents are read-only; videos play directly from the archive without temporary extraction.
 - **Find files across folders.** Search file and folder names (and zip file names while zip files are shown),

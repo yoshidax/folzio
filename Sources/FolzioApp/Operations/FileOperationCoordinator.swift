@@ -38,7 +38,9 @@ final class FileOperationCoordinator {
         await transfer(urls, to: destination, kind: .move)
     }
 
-    func internalDrop(_ urls: [URL], to destination: URL, copy: Bool) async {
+    /// A drop from this app's views or from another app (FR-020, FR-347). Validates the selection before confirming and
+    /// again before each item (EC-16, EC-121, EC-122).
+    func drop(_ urls: [URL], to destination: URL, copy: Bool) async {
         await transfer(urls, to: destination, kind: copy ? .copy : .move, validateDrop: true)
     }
 
@@ -316,12 +318,7 @@ final class FileOperationCoordinator {
     }
 
     private func pasteboardFileURLs() -> [URL] {
-        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
-        let objects = NSPasteboard.general.readObjects(
-            forClasses: [NSURL.self],
-            options: options
-        ) as? [NSURL]
-        return (objects ?? []).map { $0 as URL }
+        PasteboardFileURLs.fileURLs(in: .general)
     }
 
     private func siblingNames(in folder: URL) async -> Set<String> {
