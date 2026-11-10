@@ -141,6 +141,19 @@ final class MainSplitViewController: NSSplitViewController {
         ).canStart
     }
 
+    /// State of the toolbar Slideshow button, which starts the slideshow when stopped and stops it while running
+    /// (FR-350 to FR-352). Without a window, the slideshow cannot start (`canStartSlideshow` is false).
+    var slideshowToggleState: SlideshowToggleState {
+        SlideshowToggleState(
+            canStart: canStartSlideshow,
+            isActive: slideshowCoordinator.isActive,
+            isRestoring: slideshowCoordinator.isRestoring,
+            hasSheet: view.window?.attachedSheet != nil,
+            hasAppModal: NSApp.modalWindow != nil,
+            isEditingText: fileListViewController.isEditingText
+        )
+    }
+
 
     var onInitialListingDisplayed: (() -> Void)? {
         didSet {
@@ -468,6 +481,20 @@ final class MainSplitViewController: NSSplitViewController {
     @objc func startSlideshow(_ sender: Any?) {
         guard canStartSlideshow else { return }
         slideshowCoordinator.start()
+    }
+
+    /// The toolbar Slideshow button (FR-351, FR-352). Recomputes the state when pressed, so a stale button does not
+    /// act. Stopping uses the same path as an accepted Esc. Does not use `handleSlideshowEscapeFallback()`, because
+    /// it requires the target window to be the key window.
+    func toggleSlideshow(_ sender: Any?) {
+        let state = slideshowToggleState
+        guard state.isEnabled else { return }
+        switch state.action {
+        case .start:
+            startSlideshow(sender)
+        case .stop:
+            slideshowCoordinator.stop()
+        }
     }
 
     /// Saves the normal presentation at start (panes, focus, and three-pane widths) and moves to previewOnly

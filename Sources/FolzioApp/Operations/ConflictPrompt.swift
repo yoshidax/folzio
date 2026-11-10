@@ -9,10 +9,21 @@ final class ConflictPrompt {
         let applyToAll: Bool
     }
 
+    var fallbackWindow: @MainActor () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow }
+    var presentSheet: @MainActor (NSAlert, NSWindow) async -> NSApplication.ModalResponse = { alert, window in
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        return await withCheckedContinuation { continuation in
+            alert.beginSheetModal(for: window) { response in
+                continuation.resume(returning: response)
+            }
+        }
+    }
+
     init() {}
 
-    func resolve(conflictingNames: [String], destination: URL?, allowReplace: Bool = true) async -> Choice {
-        guard let window = NSApp.keyWindow ?? NSApp.mainWindow else {
+    func resolve(conflictingNames: [String], destination: URL?, allowReplace: Bool = true, parentWindow: NSWindow? = nil) async -> Choice {
+        guard let window = parentWindow ?? fallbackWindow() else {
             return Choice(resolution: .abort, applyToAll: false)
         }
 
@@ -36,11 +47,7 @@ final class ConflictPrompt {
             alert.suppressionButton?.title = l10n.text(.dialogConflictApplyAll)
         }
 
-        let response = await withCheckedContinuation { continuation in
-            alert.beginSheetModal(for: window) { response in
-                continuation.resume(returning: response)
-            }
-        }
+        let response = await presentSheet(alert, window)
 
         withExtendedLifetime(languageObserver) {}
 

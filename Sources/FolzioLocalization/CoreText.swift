@@ -69,8 +69,30 @@ extension Localizer {
         }
     }
 
+    public var importedImageNamePrefix: String { text(.importImagePrefix) }
+    public var cancelReceivingTitle: String { text(.menuCancelReceiving) }
+    public var receivingCancelTitle: String { text(.receivingCancel) }
+    public func receivingStageText(isChecking: Bool) -> String { text(isChecking ? .checkingStage : .receivingStage) }
+    public func receivingProgressText(total: Int, completed: Int, size: String) -> String {
+        text(.receivingProgress, .number(total), .number(completed), .text(size))
+    }
+
+    public func text(for rejection: ImportRejection) -> String {
+        switch rejection {
+        case .notImageOrVideo: return text(.errorImportNotImageOrVideo)
+        case .unsupportedImageFormat: return text(.errorImportUnsupportedImage)
+        case .unsupportedVideoFormat: return text(.errorImportUnsupportedVideo)
+        case .notRegularFile: return text(.errorImportNotRegularFile)
+        case let .tooLarge(limit): return text(limit > ExpectedKind.image.byteLimit ? .errorImportTooLargeVideo : .errorImportTooLargeImage)
+        case .tooManyPixels: return text(.errorImportTooManyPixels)
+        case let .timedOut(seconds): return text(.errorImportTimedOut, .number(seconds))
+        case .sourceFailed: return text(.errorImportSourceFailed)
+        }
+    }
+
     public func text(for reason: OperationFailureReason) -> String {
         switch reason {
+        case let .importRejected(rejection): return text(for: rejection)
         case .noDestination: return text(.errorOperationNoDestination)
         case .destinationNotFound: return text(.errorOperationDestinationNotFound)
         case .sourceNotFound: return text(.errorOperationSourceNotFound)

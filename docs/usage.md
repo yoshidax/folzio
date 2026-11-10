@@ -181,6 +181,7 @@ For a first look, see the [README](../README.md).
 ### Starting and Controls
 
 - Start with ⇧⌘S, View → "Start Slideshow" (スライドショーを開始), or the play button in the toolbar.
+  - During a slideshow, the play button in the toolbar appears pressed. Click it again to end the slideshow.
 - The slideshow advances through the media in display order at the configured interval.
   - With repeat on, it wraps from the last item back to the first.
   - With repeat off, it ends one interval after the last item is shown.
@@ -191,7 +192,7 @@ For a first look, see the [README](../README.md).
   Ending restores the previous panes, focus, and widths.
 - During a slideshow:
   - The arrow keys move through the hidden list and restart the timer.
-  - Esc ends the slideshow.
+  - Esc or the play button in the toolbar ends the slideshow.
   - `/` plays or pauses a video, and `<` / `>` seek 5 seconds. These do not change the timer.
 
 ### Slideshow Settings
@@ -255,7 +256,31 @@ For a first look, see the [README](../README.md).
   - The same rules as in Finder decide whether to move or copy: when every item is on the same volume it moves,
     and otherwise it copies. Hold ⌥ to copy or ⌘ to move.
   - The confirmation and conflict dialogs appear as for copies and moves inside Folzio.
-- Images from a web page (that are not files), links, and text from a web browser are not accepted.
+- Web images can be saved as described below. Links or text alone are not accepted.
+
+### Saving Images from a Browser
+
+- Drag an image from Safari or Chrome onto a folder in the tree, an available favorite,
+  or a folder in list view, thumbnail view, or search results. Drop on the background of a regular folder's
+  file list to save there. Images are copied; modifier keys can prevent a drop if the browser does not allow copying.
+- In the browser, choose “Copy Image”, then press ⌘V or choose “Paste” in Folzio's file list to save in the displayed folder.
+  In the tree, select one regular folder and press ⌘V, or right-click it and choose “Paste Here”.
+  Image data is saved as PNG, using the image URL's name when available, or a name such as `Image 2026-11-10 18.00.00.png`.
+  When converting data with several frames or pages, only the first is saved.
+- If the clipboard contains files, those files are pasted instead of an accompanying image.
+  “Move Item Here” (⌥⌘V) is unavailable for image data alone. Pasting an image is unavailable inside a zip,
+  in the search-results list, or on a favorite. During renaming, ⌘V belongs to the text editor.
+- Drag photos or MOV/MP4 videos from Photos to save the exported files. Photos may export an HEIC photo as JPEG.
+  Copying a photo in Photos and pressing ⌘V uses the file it provides; the original format is not guaranteed.
+- If reception takes longer than two seconds, a panel shows progress. Use its Cancel button to cancel one reception,
+  or ⌘. to cancel the most recently started one. During renaming or while a sheet or dialog is open, ⌘. cancels that edit
+  or dialog and leaves reception running. Cancelling reception saves nothing to the destination;
+  temporary files are removed after the source finishes exporting or the reception limits are reached.
+- Saving uses the normal copy-confirmation setting. A name conflict always offers Replace, Keep Both, or Stop.
+- Each image is limited to 256 MB, and each exported video to 4 GB. Converting image data to PNG is limited to
+  100 megapixels in the first frame. Reception times out after 60 seconds for images, or ten minutes for video.
+  Images that Folzio cannot display can still be saved when their format is supported for import;
+  SVG, EPS, PostScript, PDF, and non-image documents are not imported as images.
 
 ### New Folders
 
@@ -433,7 +458,7 @@ For a first look, see the [README](../README.md).
 
 | Action | Default shortcut |
 |--------|----------|
-| Start / end a slideshow | ⇧⌘S (View menu, toolbar) / Esc |
+| Start / end a slideshow | ⇧⌘S (View menu, toolbar) / Esc (toolbar) |
 | Move through the hidden list during a slideshow (restarts the timer) | Arrow keys |
 | Play / pause a video or seek 5 seconds during a slideshow | `/`, `<` / `>` |
 | Skip a video back / forward 5 seconds (not while typing) | `<` / `>` |

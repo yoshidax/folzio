@@ -19,6 +19,8 @@ struct ShortcutSettingsTextTests {
         .toolbarZoomInHelp, .toolbarZoomToFitHelp, .toolbarZoomOutHelp, .toolbarThumbnails, .toolbarList,
         .toolbarThumbnailSize,
     ]
+    /// Toolbar texts that name a fixed key, so they take no argument (TAK-89).
+    private let toolbarPlainKeys: [TextKey] = [.toolbarStopSlideshowHelp]
 
     @Test("Every shortcut settings text is translated, and plain texts take no argument")
     func plainTextsAreTranslated() throws {
@@ -46,6 +48,22 @@ struct ShortcutSettingsTextTests {
                 #expect(key.arguments == [.text], "\(key.rawValue)")
                 let text = localizer.text(key, .text("<VALUE>"))
                 #expect(text.contains("<VALUE>"), "\(language): \(key.rawValue)")
+            }
+        }
+    }
+
+    @Test("Toolbar texts for a fixed key are translated and take no argument")
+    func toolbarPlainTextsAreTranslated() throws {
+        for language in LocalizationTestSupport.languages {
+            let strings = try LocalizationTestSupport.strings(language)
+            let localizer = LocalizationTestSupport.localizer(language)
+            for key in toolbarPlainKeys {
+                let translation = try #require(strings[key.rawValue], "\(language): \(key.rawValue)")
+                #expect(!translation.isEmpty)
+                #expect(!translation.contains("%"), "\(language): \(key.rawValue)")
+                #expect(translation.contains("Esc"), "\(language): \(key.rawValue)")
+                #expect(key.arguments.isEmpty, "\(key.rawValue)")
+                #expect(localizer.text(key) != key.rawValue)
             }
         }
     }

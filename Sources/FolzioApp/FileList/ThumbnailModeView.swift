@@ -477,6 +477,7 @@ final class ThumbnailModeView: NSView {
     /// A drop on a folder item, from this app's views or from another app: the URLs, the destination folder, and
     /// whether to copy (FR-020, FR-345, FR-346).
     var onDrop: (([URL], URL, Bool) -> Void)?
+    var onImageDrop: ((any NSDraggingInfo, URL) -> Bool)?
     /// Esc. Returns true when handled (ends search results; FR-086).
     var onEscape: (() -> Bool)? {
         get { collectionView.onEscape }
@@ -639,7 +640,7 @@ final class ThumbnailModeView: NSView {
             forSupplementaryViewOfKind: NSCollectionView.elementKindInterItemGapIndicator,
             withIdentifier: Self.gapIndicatorIdentifier
         )
-        collectionView.registerForDraggedTypes([.fileURL])
+        collectionView.registerForDraggedTypes(ExternalImageDrag.registeredTypes)
         collectionView.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
         collectionView.setDraggingSourceOperationMask(ExternalDrag.sourceOperationMaskOutsideApp, forLocal: false)
         InternalDrag.register(collectionView)
@@ -1141,7 +1142,7 @@ extension ThumbnailModeView: NSCollectionViewDataSource {
             return true
         }
         // A drop from another app, such as Finder (FR-345, FR-346).
-        guard let drop = ExternalDrag.dropOperation(info, destination: destination) else { return false }
+        guard let drop = ExternalDrag.dropOperation(info, destination: destination) else { return onImageDrop?(info, destination) ?? false }
         onDrop?(drop.urls, destination, drop.kind == .copy)
         return true
     }

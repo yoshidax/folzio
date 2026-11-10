@@ -4,6 +4,17 @@ import FolzioLocalization
 
 @MainActor
 final class ConfirmationPresenter {
+    var fallbackWindow: @MainActor () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow }
+    var presentSheet: @MainActor (NSAlert, NSWindow) async -> NSApplication.ModalResponse = { alert, window in
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        return await withCheckedContinuation { continuation in
+            alert.beginSheetModal(for: window) { response in
+                continuation.resume(returning: response)
+            }
+        }
+    }
+
     private let settings: SettingsStore
 
     init(settings: SettingsStore) {
@@ -20,7 +31,8 @@ final class ConfirmationPresenter {
         includesFolders: Bool = false,
         origin: OperationOrigin = .fileList,
         location: String? = nil,
-        itemLocations: [String] = []
+        itemLocations: [String] = [],
+        parentWindow: NSWindow? = nil
     ) async -> Bool {
         let isSkippable = ConfirmationPolicy.isSkippable(operation.kind, origin: origin)
         if isSkippable, !settings.confirmation.confirmBeforeFileOperations {
@@ -34,7 +46,8 @@ final class ConfirmationPresenter {
                 return text
             },
             confirmTitle: { l10n.text(.dialogConfirmContinue) },
-            allowsSuppression: isSkippable
+            allowsSuppression: isSkippable,
+            parentWindow: parentWindow
         )
     }
 
@@ -58,7 +71,8 @@ final class ConfirmationPresenter {
         messageText: @escaping @MainActor () -> String,
         informativeText: @escaping @MainActor () -> String,
         confirmTitle: @escaping @MainActor () -> String,
-        allowsSuppression: Bool
+        allowsSuppression: Bool,
+        parentWindow: NSWindow? = nil
     ) async -> Bool {
 
         let alert = NSAlert()
@@ -81,12 +95,8 @@ final class ConfirmationPresenter {
         }
 
         let response: NSApplication.ModalResponse
-        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
-            response = await withCheckedContinuation { continuation in
-                alert.beginSheetModal(for: window) { response in
-                    continuation.resume(returning: response)
-                }
-            }
+        if let window = parentWindow ?? fallbackWindow() {
+            response = await presentSheet(alert, window)
         } else if allowsSuppression {
             return true
         } else {

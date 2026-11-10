@@ -21,6 +21,8 @@ macOS 15 or later · Apple silicon only · English and Japanese · Works locally
   shortcuts and drag and drop. Create folders on the spot, select several folders in the tree to move, copy,
   or trash them at once, and copy the full path of a file or folder. Drag and drop also works with Finder
   and web browsers.
+- **Save images from a browser.** Drop an image onto a folder, or choose “Copy Image” in the browser and press ⌘V
+  in Folzio. You can also drag photos and videos from Photos. Cancel a pending reception with ⌘. or its Cancel button.
 - **Look inside zip archives.** Browse folders and preview images and videos inside zip files.
   Archive contents are read-only; videos play directly from the archive without temporary extraction.
 - **Find files across folders.** Search file and folder names (and zip file names while zip files are shown),
@@ -74,6 +76,7 @@ The keys below are the defaults. You can change the shortcut of a menu command i
 | Search file and folder names | ⌘F |
 | Open a folder / go up one level | ⌘↓ / ⌘↑ |
 | Create a new folder | ⇧⌘N |
+| Cancel receiving images or videos | ⌘. |
 | Quick Look the selected media | Space |
 | Zoom an image in / out / fit to view | ⌘+ / ⌘− / ⌘0 |
 | Skip a video back / forward 5 seconds | `<` / `>` |

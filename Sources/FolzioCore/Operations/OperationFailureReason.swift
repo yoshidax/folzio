@@ -4,6 +4,7 @@ import Foundation
 /// `FolzioLocalization` chooses the text. Reasons returned by the OS are kept verbatim in `systemReason`
 /// and are not re-translated (EC-111).
 public enum OperationFailureReason: Error, Sendable, Equatable {
+    case importRejected(ImportRejection)
     case noDestination
     case destinationNotFound
     case sourceNotFound

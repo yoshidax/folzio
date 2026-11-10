@@ -34,16 +34,6 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         thumbnailModeView.contextMenu = menu
     }
 
-    static func pasteboardHasFileURLs() -> Bool {
-        let options: [NSPasteboard.ReadingOptionKey: Any] = [
-            .urlReadingFileURLsOnly: true,
-        ]
-        return NSPasteboard.general.canReadObject(
-            forClasses: [NSURL.self],
-            options: options
-        )
-    }
-
     func menuNeedsUpdate(_ menu: NSMenu) {
         // A click on the background shows the displayed folder's menu instead of the selection's (FR-213, R7).
         let isBackground = host?.isContextClickOnBackground ?? false
@@ -70,9 +60,9 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
 
         // Paste and Move Item Here are unavailable inside a zip (FR-073).
         let allowsPaste = host?.focusedItemCommands.allowsPaste ?? true
-        let canPaste = allowsPaste && Self.pasteboardHasFileURLs()
-        pasteItem.isEnabled = canPaste
-        movePasteItem.isEnabled = canPaste
+        let available = PasteboardImport.availability()
+        pasteItem.isEnabled = allowsPaste && available.allowsPaste(move: false)
+        movePasteItem.isEnabled = allowsPaste && available.allowsPaste(move: true)
     }
 
     private func buildMenu() {

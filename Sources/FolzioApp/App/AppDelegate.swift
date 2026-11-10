@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         controller.showWindow(nil)
 
+        ImportSessionManager.shared.start()
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -59,6 +60,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    private var importShutdownFinished = false
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if importShutdownFinished { return .terminateNow }
+        Task { @MainActor in
+            await ImportSessionManager.shared.shutdown()
+            importShutdownFinished = true
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {

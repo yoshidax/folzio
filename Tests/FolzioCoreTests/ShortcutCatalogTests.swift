@@ -30,6 +30,7 @@ struct ShortcutCatalogTests {
         quickLook|Space|files
         rename|Return|files
         copy|⌘C|files
+        cancelReceiving|⌘.|files
         paste|⌘V / ⌥⌘V|files
         copyPath|⌥⌘C|files
         duplicate|⌘D|files
@@ -62,7 +63,7 @@ struct ShortcutCatalogTests {
     @Test("All IDs occur once and every group contains reference entries")
     func coversAllIdentifiers() {
         let ids = ShortcutCatalog.entries.map(\.id)
-        #expect(ids.count == 46)
+        #expect(ids.count == 47)
         #expect(Set(ids).count == ids.count)
         #expect(Set(ids) == Set(ShortcutID.allCases))
         #expect(ShortcutSection.allCases.map(\.rawValue) == [

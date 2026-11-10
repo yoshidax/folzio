@@ -349,7 +349,7 @@
 /* Tooltip and accessibility text for the toolbar and size bar. Include the shortcut */
 "toolbar.thumbnailSize" = "Thumbnail Size (%1$@)";
 
-/* Toolbar group name. Also shown in the customization palette and the text display mode */
+/* Name of the Slideshow toolbar item. Also the accessibility label of the toggle button in both states */
 "toolbar.slideshowLabel" = "Slideshow";
 
 /* Toolbar group name. Also shown in the customization palette and the text display mode */
@@ -381,6 +381,9 @@
 
 /* Slideshow tooltip. Includes the shortcut */
 "toolbar.startSlideshowHelp" = "Start Slideshow (%1$@)";
+
+/* Slideshow toggle button tooltip while running. Esc is a fixed key */
+"toolbar.stopSlideshowHelp" = "Stop Slideshow (Esc)";
 
 /* Zoom in tooltip. Includes the shortcut */
 "toolbar.zoomInHelp" = "Zoom In (%1$@)";
@@ -1000,3 +1003,22 @@
 
 /* Accessibility help of the repository link in the About window */
 "about.link" = "Opens the Folzio repository in your default web browser";
+
+/* External image import */
+"import.name.image" = "Image";
+"error.import.notImageOrVideo" = "Can’t read as an image or video";
+"error.import.unsupportedImage" = "This image format can’t be saved";
+"error.import.unsupportedVideo" = "This video format can’t be saved";
+"error.import.notRegularFile" = "Folders, packages, and links can’t be saved";
+"error.import.tooLargeImage" = "Larger than 256 MB";
+"error.import.tooLargeVideo" = "Larger than 4 GB";
+"error.import.tooManyPixels" = "Larger than 100 megapixels to convert";
+"error.import.timedOut" = "Not provided within %1$@ seconds";
+"error.import.sourceFailed" = "The source app couldn’t provide the file";
+"import.receiving.progress" = "Receiving… (%2$@ of %1$@, %3$@)";
+"import.receiving.cancel" = "Cancel";
+"import.receiving.stage" = "Receiving";
+"import.checking.stage" = "Checking";
+"menu.edit.cancelReceiving" = "Cancel Receiving";
+
+"shortcuts.condition.cancelReceiving" = "While receiving; available outside text editing, sheets, and dialogs";

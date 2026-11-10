@@ -131,6 +131,7 @@ public enum FixedShortcutKeys {
 /// Keys of app and system basics that cannot be reassigned.
 public enum ReservedShortcutKeys {
     public static let combinations: Set<KeyCombination> = [
+        KeyCombination(key: ".", modifiers: [.command]),
         KeyCombination(key: "q", modifiers: [.command]),
         KeyCombination(key: "w", modifiers: [.command]),
         KeyCombination(key: ",", modifiers: [.command]),

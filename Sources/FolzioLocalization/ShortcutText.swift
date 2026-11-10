@@ -40,6 +40,7 @@ public enum ShortcutText {
         case .quickLook: return .shortcutQuickLook
         case .rename: return .shortcutRename
         case .copy: return .shortcutCopy
+        case .cancelReceiving: return .menuCancelReceiving
         case .paste: return .shortcutPaste
         case .copyPath: return .shortcutCopyPath
         case .duplicate: return .shortcutDuplicate
@@ -91,6 +92,7 @@ public enum ShortcutText {
         case .quickLook: return .shortcutQuickLookCondition
         case .rename: return .shortcutRenameCondition
         case .copy: return .shortcutCopyCondition
+        case .cancelReceiving: return .shortcutCancelReceivingCondition
         case .paste: return .shortcutPasteCondition
         case .copyPath: return .shortcutCopyPathCondition
         case .duplicate: return .shortcutDuplicateCondition

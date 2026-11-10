@@ -32,6 +32,8 @@ struct ShortcutTextTests {
         for id in ShortcutID.allCases {
             #expect((ShortcutText.condition(id) == nil) == withoutConditions.contains(id))
         }
+        #expect(ShortcutText.description(.cancelReceiving) == .menuCancelReceiving)
+        #expect(ShortcutText.condition(.cancelReceiving) == .shortcutCancelReceivingCondition)
         #expect(ShortcutText.condition(.selection) != ShortcutText.condition(.slideshowNavigate))
         #expect(ShortcutText.description(.videoControls) != ShortcutText.description(.selection))
     }

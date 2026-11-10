@@ -31,6 +31,7 @@ struct ShortcutAssignmentsTests {
             KeyCombination(key: "w", modifiers: [.command]),
             KeyCombination(key: ",", modifiers: [.command]),
             KeyCombination(key: "c", modifiers: [.command]),
+            KeyCombination(key: ".", modifiers: [.command]),
         ] {
             #expect(ShortcutAssignments().assigning(candidate, to: .newFolder) == .failure(.reserved), "\(candidate)")
         }

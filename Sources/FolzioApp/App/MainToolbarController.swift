@@ -79,6 +79,7 @@ final class MainToolbarController: NSObject {
             self?.applyZoomAvailability()
         }
         observeEditingAvailability()
+        observeSheetAvailability()
         observeHistoryAvailability()
     }
 
@@ -164,12 +165,8 @@ final class MainToolbarController: NSObject {
         for item in items(for: Self.slideshowIdentifier) {
             item.label = l10n.text(.toolbarSlideshowLabel)
             item.paletteLabel = item.label
-            item.toolTip = ToolbarShortcutText.text(.toolbarStartSlideshowHelp)
-            if let button = item.view as? NSButton {
-                button.toolTip = ToolbarShortcutText.text(.toolbarStartSlideshowHelp)
-                button.setAccessibilityLabel(l10n.text(.menuViewStartSlideshow))
-                button.setAccessibilityHelp(ToolbarShortcutText.text(.toolbarStartSlideshowHelp))
-            }
+            item.menuFormRepresentation?.title = item.label
+            applySlideshowState(to: item)
         }
         for item in items(for: Self.thumbnailSizeIdentifier) {
             item.label = l10n.text(.toolbarThumbnailSizeLabel)
@@ -193,7 +190,7 @@ final class MainToolbarController: NSObject {
         case Self.paneLayoutIdentifier:
             applyPaneLayout(panes.paneLayout, to: item)
         case Self.slideshowIdentifier:
-            (item.view as? NSButton)?.isEnabled = panes.canStartSlideshow
+            applySlideshowState(to: item)
         case Self.previewZoomIdentifier:
             applyZoomAvailability(to: item)
         case Self.mediaTypeFilterIdentifier:
@@ -213,10 +210,38 @@ final class MainToolbarController: NSObject {
 
     private func updateSlideshowAvailability() {
         for item in items(for: Self.slideshowIdentifier) {
-            (item.view as? NSButton)?.isEnabled = panes.canStartSlideshow
+            applySlideshowState(to: item)
         }
         applyHistoryAvailability()
         toolbar.validateVisibleItems()
+    }
+
+    /// Applies on/off, availability, and the tooltip of the Slideshow toggle button (FR-350 to FR-353). The
+    /// accessibility label stays the item name in both states, and the toggle value tells whether a slideshow is
+    /// running (A-211). Both the item and the button are enabled or disabled, because the text display mode uses
+    /// the item.
+    private func applySlideshowState(to item: NSToolbarItem) {
+        let state = panes.slideshowToggleState
+        let help = state.isOn
+            ? l10n.text(.toolbarStopSlideshowHelp)
+            : ToolbarShortcutText.text(.toolbarStartSlideshowHelp)
+        item.isEnabled = state.isEnabled
+        item.toolTip = help
+        item.menuFormRepresentation?.state = state.isOn ? .on : .off
+        guard let button = item.view as? NSButton else { return }
+        button.isEnabled = state.isEnabled
+        button.state = state.isOn ? .on : .off
+        button.toolTip = help
+        button.setAccessibilityLabel(l10n.text(.toolbarSlideshowLabel))
+        button.setAccessibilityHelp(help)
+    }
+
+    /// The Slideshow toggle button, its overflow menu item, and the text display mode (FR-351, EC-240). A push on/off
+    /// button flips its own state before sending the action, so the state is reapplied from the slideshow afterward,
+    /// including when the press did nothing.
+    @objc private func slideshowToggled(_ sender: Any?) {
+        panes.toggleSlideshow(sender)
+        updateSlideshowAvailability()
     }
 
     /// Enables or disables Zoom In, Zoom Out, and Zoom to Fit from image display, pane visibility, and zoom limits
@@ -239,6 +264,27 @@ final class MainToolbarController: NSObject {
 
     private func observeEditingAvailability() {
         for name in [NSControl.textDidBeginEditingNotification, NSControl.textDidEndEditingNotification] {
+            let token = NotificationCenter.default.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self?.updateSlideshowAvailability()
+                    }
+                }
+            }
+            editingObservers.append(token)
+        }
+    }
+
+    /// Updates the Slideshow button when a sheet opens or closes, because the button is unavailable while the main
+    /// window has a sheet during a slideshow (FR-352). The update waits one turn, because the sheet may not be attached
+    /// yet when `willBeginSheetNotification` is posted. Sheets on other windows also update the button, which is
+    /// harmless because the state is read from the main window.
+    private func observeSheetAvailability() {
+        for name in [NSWindow.willBeginSheetNotification, NSWindow.didEndSheetNotification] {
             let token = NotificationCenter.default.addObserver(
                 forName: name,
                 object: nil,
@@ -540,15 +586,16 @@ extension MainToolbarController: NSToolbarDelegate {
             let image = IconCatalog.slideshowIcon() ?? NSImage()
             let button = NSButton(
                 image: image,
-                target: panes,
-                action: #selector(MainSplitViewController.startSlideshow(_:))
+                target: self,
+                action: #selector(slideshowToggled(_:))
             )
+            button.setButtonType(.pushOnPushOff)
             button.bezelStyle = .texturedRounded
             button.controlSize = .regular
             button.isBordered = true
             button.imagePosition = .imageOnly
             button.toolTip = ToolbarShortcutText.text(.toolbarStartSlideshowHelp)
-            button.setAccessibilityLabel(l10n.text(.menuViewStartSlideshow))
+            button.setAccessibilityLabel(l10n.text(.toolbarSlideshowLabel))
             button.setAccessibilityHelp(ToolbarShortcutText.text(.toolbarStartSlideshowHelp))
 
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
@@ -556,8 +603,17 @@ extension MainToolbarController: NSToolbarDelegate {
             item.paletteLabel = l10n.text(.toolbarSlideshowLabel)
             item.toolTip = ToolbarShortcutText.text(.toolbarStartSlideshowHelp)
             item.view = button
-            item.target = panes
-            item.action = #selector(MainSplitViewController.startSlideshow(_:))
+            item.target = self
+            item.action = #selector(slideshowToggled(_:))
+            // The overflow menu keeps the item name and shows a checkmark while running (EC-240). `validateMenuItem`
+            // applies the state and availability.
+            let menuItem = NSMenuItem(
+                title: l10n.text(.toolbarSlideshowLabel),
+                action: #selector(slideshowToggled(_:)),
+                keyEquivalent: ""
+            )
+            menuItem.target = self
+            item.menuFormRepresentation = menuItem
             item.autovalidates = true
             return item
         case Self.previewZoomIdentifier:
@@ -658,9 +714,8 @@ extension MainToolbarController: NSToolbarItemValidation {
             (item.view as? NSSegmentedControl)?.isEnabled = enabled
             return enabled
         case Self.slideshowIdentifier:
-            let enabled = panes.canStartSlideshow
-            (item.view as? NSButton)?.isEnabled = enabled
-            return enabled
+            applySlideshowState(to: item)
+            return panes.slideshowToggleState.isEnabled
         case Self.previewZoomIdentifier:
             applyZoomAvailability(to: item)
             return panes.zoomAvailability.isAvailable
@@ -671,5 +726,15 @@ extension MainToolbarController: NSToolbarItemValidation {
         default:
             return true
         }
+    }
+}
+
+extension MainToolbarController: NSMenuItemValidation {
+    /// The overflow menu item of the Slideshow toggle button (EC-240).
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(slideshowToggled(_:)) else { return true }
+        let state = panes.slideshowToggleState
+        menuItem.state = state.isOn ? .on : .off
+        return state.isEnabled
     }
 }

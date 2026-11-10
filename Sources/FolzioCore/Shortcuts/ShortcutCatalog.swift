@@ -40,6 +40,7 @@ public enum ShortcutID: String, CaseIterable, Sendable {
     case rename
     case copy
     case paste
+    case cancelReceiving
     case copyPath
     case duplicate
     case newFolder
@@ -138,6 +139,7 @@ public enum ShortcutCatalog {
         ShortcutEntry(id: .quickLook, keys: "Space", section: .files),
         ShortcutEntry(id: .rename, keys: "Return", section: .files),
         ShortcutEntry(id: .copy, keys: "⌘C", section: .files),
+        ShortcutEntry(id: .cancelReceiving, keys: "⌘.", section: .files),
         ShortcutEntry(id: .paste, keys: "⌘V / ⌥⌘V", section: .files, parts: [.text("⌘V / "), .command(.movePaste)]),
         ShortcutEntry(id: .copyPath, keys: "⌥⌘C", section: .files, parts: [.command(.copyPathname)]),
         ShortcutEntry(id: .duplicate, keys: "⌘D", section: .files, parts: [.command(.duplicate)]),

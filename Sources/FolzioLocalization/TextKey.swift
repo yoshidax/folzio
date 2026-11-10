@@ -14,6 +14,25 @@ public enum TextArgument: Sendable, Equatable {
 
 /// One user-visible string (translation unit). Defined in `Resources/{en,ja}.lproj/Localizable.strings(dict)`.
 public enum TextKey: String, CaseIterable, Sendable {
+    // MARK: - Import
+
+    case importImagePrefix = "import.name.image"
+    case errorImportNotImageOrVideo = "error.import.notImageOrVideo"
+    case errorImportUnsupportedImage = "error.import.unsupportedImage"
+    case errorImportUnsupportedVideo = "error.import.unsupportedVideo"
+    case errorImportNotRegularFile = "error.import.notRegularFile"
+    case errorImportTooLargeImage = "error.import.tooLargeImage"
+    case errorImportTooLargeVideo = "error.import.tooLargeVideo"
+    case errorImportTooManyPixels = "error.import.tooManyPixels"
+    case errorImportTimedOut = "error.import.timedOut"
+    case errorImportSourceFailed = "error.import.sourceFailed"
+    case receivingProgress = "import.receiving.progress"
+    case receivingCancel = "import.receiving.cancel"
+    case receivingStage = "import.receiving.stage"
+    case checkingStage = "import.checking.stage"
+    case shortcutCancelReceivingCondition = "shortcuts.condition.cancelReceiving"
+    case menuCancelReceiving = "menu.edit.cancelReceiving"
+
     // MARK: - Core Values
 
     case errorSearchRootEmpty = "error.searchRoot.empty"
@@ -163,6 +182,7 @@ public enum TextKey: String, CaseIterable, Sendable {
     case toolbarShowVideosOnlyHelp = "toolbar.showVideosOnlyHelp"
     case toolbarZipFilesHelp = "toolbar.zipFilesHelp"
     case toolbarStartSlideshowHelp = "toolbar.startSlideshowHelp"
+    case toolbarStopSlideshowHelp = "toolbar.stopSlideshowHelp"
     case toolbarZoomInHelp = "toolbar.zoomInHelp"
     case toolbarZoomToFitHelp = "toolbar.zoomToFitHelp"
     case toolbarZoomOutHelp = "toolbar.zoomOutHelp"
@@ -423,6 +443,10 @@ public enum TextKey: String, CaseIterable, Sendable {
             return [.number]
         case .dialogOperationSummary:
             return [.number, .number]
+        case .errorImportTimedOut:
+            return [.number]
+        case .receivingProgress:
+            return [.number, .number, .text]
         default:
             return []
         }
@@ -431,6 +455,8 @@ public enum TextKey: String, CaseIterable, Sendable {
     /// Translator-facing description (where the string is used and what each value means).
     public var comment: String {
         switch self {
+        case .shortcutCancelReceivingCondition, .importImagePrefix, .errorImportNotImageOrVideo, .errorImportUnsupportedImage, .errorImportUnsupportedVideo, .errorImportNotRegularFile, .errorImportTooLargeImage, .errorImportTooLargeVideo, .errorImportTooManyPixels, .errorImportTimedOut, .errorImportSourceFailed, .receivingProgress, .receivingCancel, .receivingStage, .checkingStage, .menuCancelReceiving:
+            return "Text for receiving an external image or video. Timeout takes seconds; progress takes total, completed, and formatted size."
         case .menuFileShortcuts:
             return "File menu item that opens the shortcut reference"
         case .menuFileClose:
@@ -724,13 +750,18 @@ public enum TextKey: String, CaseIterable, Sendable {
         case .contextPasteHere, .contextMovePasteHere:
             return "Paste in the directory tree's context menu"
         case .toolbarHistory, .toolbarPanes, .toolbarZoomGroup, .toolbarMediaType,
-             .toolbarViewMode, .toolbarSize, .toolbarSlideshowLabel, .toolbarZipFilesLabel,
+             .toolbarViewMode, .toolbarSize, .toolbarZipFilesLabel,
              .toolbarThumbnailSizeLabel:
             return "Toolbar group names. They are also shown in the customization palette and in the text display mode"
+        case .toolbarSlideshowLabel:
+            return "Name of the Slideshow toolbar item. Also shown in the customization palette and in the text display mode. "
+                + "It is also the accessibility label of the toggle button, which VoiceOver reads in both the on and off states"
         case .toolbarThumbnailSize:
             return "Thumbnail size in the toolbar and size bar. The value is the shortcut text"
         case .toolbarStartSlideshowHelp:
             return "Slideshow tooltip. The value is the shortcut text"
+        case .toolbarStopSlideshowHelp:
+            return "Tooltip and accessibility help of the Slideshow toggle button while a slideshow is running. Esc is a fixed key"
         case .toolbarZoomInHelp, .toolbarZoomToFitHelp, .toolbarZoomOutHelp:
             return "Zoom in, zoom to fit, and zoom out tooltips. The value is the shortcut text"
         case .toolbarGoBackHelp, .toolbarGoForwardHelp, .toolbarShowFileListOnlyHelp, .toolbarShowPreviewOnlyHelp,

@@ -128,6 +128,7 @@ final class ListModeView: NSView {
     /// A drop on a folder item, from this app's views or from another app: the URLs, the destination folder, and
     /// whether to copy (FR-020, FR-345, FR-346).
     var onDrop: (([URL], URL, Bool) -> Void)?
+    var onImageDrop: ((any NSDraggingInfo, URL) -> Bool)?
     /// Esc. Returns true when handled (ends search results; FR-086).
     var onEscape: (() -> Bool)? {
         get { tableView.onEscape }
@@ -259,7 +260,7 @@ final class ListModeView: NSView {
         tableView.rowHeight = 20
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.registerForDraggedTypes([.fileURL])
+        tableView.registerForDraggedTypes(ExternalImageDrag.registeredTypes)
         InternalDrag.register(tableView)
         tableView.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
         tableView.setDraggingSourceOperationMask(ExternalDrag.sourceOperationMaskOutsideApp, forLocal: false)
@@ -722,7 +723,7 @@ extension ListModeView: NSTableViewDataSource {
             return true
         }
         // A drop from another app, such as Finder (FR-345, FR-346).
-        guard let drop = ExternalDrag.dropOperation(info, destination: destination) else { return false }
+        guard let drop = ExternalDrag.dropOperation(info, destination: destination) else { return onImageDrop?(info, destination) ?? false }
         onDrop?(drop.urls, destination, drop.kind == .copy)
         return true
     }

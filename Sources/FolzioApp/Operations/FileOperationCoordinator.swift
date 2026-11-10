@@ -8,6 +8,15 @@ final class FileOperationCoordinator {
     private let service: any FileOperating
     private let confirmation: ConfirmationPresenter
     private let conflictPrompt: ConflictPrompt
+    private let imports: ImportSessionManager
+    var fallbackWindow: @MainActor () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow }
+    var presentSheet: @MainActor (NSAlert, NSWindow) async -> NSApplication.ModalResponse = { alert, window in
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        return await withCheckedContinuation { continuation in
+            alert.beginSheetModal(for: window) { continuation.resume(returning: $0) }
+        }
+    }
 
     /// Passes affected folders (the sources' parent folders and the destination) when an operation finishes.
     /// Lets the tree apply changes without waiting for FSEvents (FR-027, R32).
@@ -23,11 +32,93 @@ final class FileOperationCoordinator {
     /// selection (FR-219).
     var onOperationFinished: ((_ sources: [URL], _ removed: [URL]) -> Void)?
 
-    init(model: BrowserModel, service: any FileOperating, settings: SettingsStore) {
+    init(model: BrowserModel, service: any FileOperating, settings: SettingsStore,
+         confirmation: ConfirmationPresenter? = nil, conflictPrompt: ConflictPrompt? = nil,
+         imports: ImportSessionManager = .shared) {
         self.model = model
         self.service = service
-        self.confirmation = ConfirmationPresenter(settings: settings)
-        self.conflictPrompt = ConflictPrompt()
+        self.confirmation = confirmation ?? ConfirmationPresenter(settings: settings)
+        self.conflictPrompt = conflictPrompt ?? ConflictPrompt()
+        self.imports = imports
+    }
+
+    func importDrop(_ info: any NSDraggingInfo, to destination: URL) -> Bool {
+        guard let window = info.draggingDestinationWindow else { return false }
+        return ExternalImageDrag.accept(info, destination: destination) { [self, weak window] request, control in
+            guard let window else { return .cancelled }
+            return await saveReceived(request, control: control, parentWindow: window)
+        }
+    }
+
+    func saveReceived(_ urls: [URL], to destination: URL, sameVolume: Bool) async -> ImportSaveOutcome {
+        await saveReceived(ImportSaveRequest(files: urls, failures: [], destination: destination, sameVolume: sameVolume),
+            control: ImportSaveControl(isActive: { true }, willConfirm: {}, didConfirm: {}))
+    }
+
+    func saveReceived(_ request: ImportSaveRequest, control: ImportSaveControl, parentWindow: NSWindow? = nil) async -> ImportSaveOutcome {
+        await ImportConfirmationQueue.shared.perform { [self] in
+            // An existing sheet belongs to another operation; let it finish without blocking the main thread.
+            while control.isActive(), parentWindow?.attachedSheet != nil || NSApp?.modalWindow != nil || NSApp?.keyWindow?.attachedSheet != nil || NSApp?.mainWindow?.attachedSheet != nil {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            guard control.isActive() else { return .cancelled }
+            let (result, outcome) = await Self.transferReceived(request, service: service,
+                confirm: { [confirmation] in await confirmation.confirm($0, parentWindow: parentWindow) },
+                resolveConflict: { [conflictPrompt] conflicts, destination, allowReplace in
+                    await conflictPrompt.resolve(conflictingNames: conflicts.map(\.lastPathComponent),
+                        destination: destination, allowReplace: allowReplace, parentWindow: parentWindow)
+                }, control: control)
+            if control.isActive() { await presentFailures(result, parentWindow: parentWindow) }
+            if !result.succeeded.isEmpty {
+                await model.reloadCurrentFolder()
+                onFoldersChanged?([request.destination.standardizedFileURL])
+            }
+            return outcome
+        }
+    }
+
+    static func transferReceived(
+        _ request: ImportSaveRequest, service: any FileOperating,
+        confirm: (FileOperation) async -> Bool,
+        resolveConflict: ([URL], URL, Bool) async -> ConflictPrompt.Choice,
+        control: ImportSaveControl,
+        checkDestination: @MainActor (URL) async -> OperationFailureReason? = { destination in
+            await Task.detached { receivedDestinationFailure(destination) }.value
+        }
+    ) async -> (FileOperationResult, ImportSaveOutcome) {
+        guard control.isActive() else { return (FileOperationResult(), .cancelled) }
+        var result = FileOperationResult(failed: request.failures)
+        let initialFailure = await checkDestination(request.destination)
+        guard control.isActive() else { return (FileOperationResult(), .cancelled) }
+        if let reason = initialFailure {
+            result.failed.append(contentsOf: request.files.map { ($0, reason) })
+            if result.failed.isEmpty { result.failed.append((request.destination, reason)) }
+            return (result, .failed)
+        }
+        guard !request.files.isEmpty else { return (result, .failed) }
+        control.willConfirm()
+        guard await confirm(FileOperation(kind: .copy, sources: request.files, destination: request.destination)),
+              control.isActive() else { return (FileOperationResult(), .cancelled) }
+        if let reason = await checkDestination(request.destination) {
+            result.failed.append(contentsOf: request.files.map { ($0, reason) })
+            return (result, .failed)
+        }
+        control.didConfirm()
+        let (saved, _) = await transferItems(request.files, to: request.destination,
+            kind: request.sameVolume ? .move : .copy, service: service, resolveConflict: resolveConflict,
+            validate: { _ in control.isActive() })
+        result.succeeded.append(contentsOf: saved.succeeded)
+        result.failed.append(contentsOf: saved.failed)
+        return (result, result.succeeded.isEmpty && !result.failed.isEmpty ? .failed : .finished)
+    }
+
+    nonisolated static func receivedDestinationFailure(_ destination: URL) -> OperationFailureReason? {
+        var directory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: destination.path, isDirectory: &directory), directory.boolValue else {
+            return .destinationNotFound
+        }
+        return FileManager.default.isWritableFile(atPath: destination.path)
+            ? nil : .systemFailure(systemReason: CocoaError(.fileWriteNoPermission).localizedDescription)
     }
 
     func copy(_ urls: [URL], to destination: URL) async {
@@ -108,13 +199,24 @@ final class FileOperationCoordinator {
         )
     }
 
-    func paste(into destination: URL, move: Bool) async {
-        let urls = pasteboardFileURLs()
-        guard !urls.isEmpty else { return }
-        if move {
-            await self.move(urls, to: destination)
-        } else {
-            await self.copy(urls, to: destination)
+    func paste(into destination: URL, move: Bool, pasteboard: NSPasteboard = .general, parentWindow: NSWindow? = nil) async {
+        let available = PasteboardImport.availability(in: pasteboard)
+        guard available.allowsPaste(move: move) else { return }
+        switch available {
+        case .fileURLs:
+            let urls = PasteboardFileURLs.fileURLs(in: pasteboard)
+            if move {
+                await self.move(urls, to: destination)
+            } else {
+                await self.copy(urls, to: destination)
+            }
+        case .imageData:
+            let window = parentWindow ?? NSApp?.keyWindow ?? NSApp?.mainWindow
+            _ = imports.beginImages(ExternalImageDrag.images(in: pasteboard), destination: destination) { [self, weak window] request, control in
+                guard let window else { return .cancelled }
+                return await saveReceived(request, control: control, parentWindow: window)
+            }
+        case .none: break
         }
     }
 
@@ -317,10 +419,6 @@ final class FileOperationCoordinator {
         onFoldersChanged?(folders)
     }
 
-    private func pasteboardFileURLs() -> [URL] {
-        PasteboardFileURLs.fileURLs(in: .general)
-    }
-
     private func siblingNames(in folder: URL) async -> Set<String> {
         await Task.detached(priority: .userInitiated) {
             Set((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [])
@@ -353,13 +451,13 @@ final class FileOperationCoordinator {
         return response == .alertFirstButtonReturn
     }
 
-    private func presentFailures(_ result: FileOperationResult) async {
+    private func presentFailures(_ result: FileOperationResult, parentWindow: NSWindow? = nil) async {
         guard !result.failed.isEmpty else { return }
 
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.addButton(withTitle: l10n.text(.dialogOK))
-        _ = await runSheet(alert) {
+        _ = await runSheet(alert, parentWindow: parentWindow) {
             var lines = result.failed.prefix(10).map { failure in
                 l10n.text(.dialogOperationFailureLine, .text(failure.url.lastPathComponent), .text(l10n.text(for: failure.reason)))
             }
@@ -384,17 +482,13 @@ final class FileOperationCoordinator {
         }
     }
 
-    private func runSheet(_ alert: NSAlert, update: @escaping @MainActor () -> Void) async -> NSApplication.ModalResponse? {
-        guard let window = NSApp.keyWindow ?? NSApp.mainWindow else {
+    private func runSheet(_ alert: NSAlert, parentWindow: NSWindow? = nil, update: @escaping @MainActor () -> Void) async -> NSApplication.ModalResponse? {
+        guard let window = parentWindow ?? fallbackWindow() else {
             return nil
         }
         update()
         let languageObserver = LanguageChangeObserver(update: update)
-        let response = await withCheckedContinuation { continuation in
-            alert.beginSheetModal(for: window) { response in
-                continuation.resume(returning: response)
-            }
-        }
+        let response = await presentSheet(alert, window)
         withExtendedLifetime(languageObserver) {}
         return response
     }

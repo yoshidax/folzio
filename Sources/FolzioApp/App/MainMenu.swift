@@ -40,7 +40,7 @@ final class MainMenu {
     /// Passed explicitly so the actions operate on the main window's preview regardless of which window has key
     /// focus (FR-135, A-73).
     static func install(zoomTarget: AppDelegate) {
-        let mainMenu = NSMenu()
+        let mainMenu = MainApplicationMenu()
 
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
@@ -213,6 +213,11 @@ final class MainMenu {
         movePasteItem.keyEquivalentModifierMask = [.command, .option]
         movePasteItem.target = nil
         editMenu.addItem(movePasteItem)
+        let cancelReceiving = NSMenuItem(title: l10n.cancelReceivingTitle,
+            action: #selector(ImportSessionManager.cancelReceiving(_:)), keyEquivalent: ".")
+        cancelReceiving.keyEquivalentModifierMask = [.command]
+        cancelReceiving.target = ImportSessionManager.shared
+        editMenu.addItem(cancelReceiving)
 
         // Both FileListViewController and DirectoryTreeViewController implement copyPathname(_:); the responder
         // chain picks the focused pane's (FR-184).
@@ -364,7 +369,8 @@ final class MainMenu {
             (searchItem, .menuFileFind), (fileTrashItem, .menuFileTrash),
             (shortcutsItem, .menuFileShortcuts), (closeItem, .menuFileClose),
             (editMenuItem, .menuEdit), (redoItem, .menuEditRedo),
-            (movePasteItem, .menuEditMovePaste), (copyPathnameItem, .menuEditCopyPathname), (duplicateItem, .menuEditDuplicate),
+            (movePasteItem, .menuEditMovePaste), (cancelReceiving, .menuCancelReceiving),
+            (copyPathnameItem, .menuEditCopyPathname), (duplicateItem, .menuEditDuplicate),
             (renameItem, .menuEditRename), (editTrashItem, .menuFileTrash),
             (viewMenuItem, .menuView), (toolbarItem, .menuViewShowToolbar),
             (fullScreenItem, .menuViewFullScreen), (zoomInItem, .menuViewZoomIn),

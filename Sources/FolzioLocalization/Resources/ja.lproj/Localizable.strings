@@ -349,7 +349,7 @@
 /* Tooltip and accessibility text for the toolbar and size bar. Include the shortcut */
 "toolbar.thumbnailSize" = "サムネイルサイズ（%1$@）";
 
-/* Toolbar group name. Also shown in the customization palette and the text display mode */
+/* Name of the Slideshow toolbar item. Also the accessibility label of the toggle button in both states */
 "toolbar.slideshowLabel" = "スライドショー";
 
 /* Toolbar group name. Also shown in the customization palette and the text display mode */
@@ -381,6 +381,9 @@
 
 /* Slideshow tooltip. Includes the shortcut */
 "toolbar.startSlideshowHelp" = "スライドショーを開始（%1$@）";
+
+/* Slideshow toggle button tooltip while running. Esc is a fixed key */
+"toolbar.stopSlideshowHelp" = "スライドショーを停止（Esc）";
 
 /* Zoom in tooltip. Includes the shortcut */
 "toolbar.zoomInHelp" = "拡大（%1$@）";
@@ -1000,3 +1003,22 @@
 
 /* Accessibility help of the repository link in the About window */
 "about.link" = "Folzio のリポジトリを既定の Web ブラウザで開きます";
+
+/* External image import */
+"import.name.image" = "画像";
+"error.import.notImageOrVideo" = "画像または動画として読めません";
+"error.import.unsupportedImage" = "この形式の画像は保存できません";
+"error.import.unsupportedVideo" = "この形式の動画は保存できません";
+"error.import.notRegularFile" = "フォルダ・パッケージ・リンクは保存できません";
+"error.import.tooLargeImage" = "256 MB を超えるため保存できません";
+"error.import.tooLargeVideo" = "4 GB を超えるため保存できません";
+"error.import.tooManyPixels" = "1 億画素を超えるため変換できません";
+"error.import.timedOut" = "%1$@ 秒以内に書き出されませんでした";
+"error.import.sourceFailed" = "ドラッグ元のアプリがファイルを書き出せませんでした";
+"import.receiving.progress" = "受け取り中…（%1$@ 件中 %2$@ 件、%3$@）";
+"import.receiving.cancel" = "取り消す";
+"import.receiving.stage" = "書き出し中";
+"import.checking.stage" = "確認中";
+"menu.edit.cancelReceiving" = "受け取りを取り消す";
+
+"shortcuts.condition.cancelReceiving" = "受け取り中。文字の編集・シート・ダイアログの外で有効";

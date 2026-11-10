@@ -526,16 +526,18 @@ final class DirectoryTreeViewController: NSViewController {
     @objc func paste(_ sender: Any?) {
         guard let node = fileTargetNode(for: sender) else { return }
         let destination = node.url
+        let window = view.window
         Task { @MainActor in
-            await coordinator.paste(into: destination, move: false)
+            await coordinator.paste(into: destination, move: false, parentWindow: window)
         }
     }
 
     @objc func movePaste(_ sender: Any?) {
         guard let node = fileTargetNode(for: sender) else { return }
         let destination = node.url
+        let window = view.window
         Task { @MainActor in
-            await coordinator.paste(into: destination, move: true)
+            await coordinator.paste(into: destination, move: true, parentWindow: window)
         }
     }
 
@@ -1056,7 +1058,7 @@ final class DirectoryTreeViewController: NSViewController {
         outlineView.canDragRowsHandler = { [weak self] rows, point in
             self?.canDragRows(rows, at: point) ?? false
         }
-        outlineView.registerForDraggedTypes([.fileURL])
+        outlineView.registerForDraggedTypes(ExternalImageDrag.registeredTypes)
         outlineView.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
         outlineView.setDraggingSourceOperationMask(ExternalDrag.sourceOperationMaskOutsideApp, forLocal: false)
         InternalDrag.register(outlineView)
@@ -1820,7 +1822,7 @@ extension DirectoryTreeViewController: NSOutlineViewDataSource {
             return true
         }
         // A drop from another app, such as Finder: move or copy by the Finder rules (FR-346, FR-347).
-        guard let drop = ExternalDrag.dropOperation(info, destination: destination) else { return false }
+        guard let drop = ExternalDrag.dropOperation(info, destination: destination) else { return coordinator.importDrop(info, to: destination) }
         Task { @MainActor in
             await coordinator.drop(drop.urls, to: destination, copy: drop.kind == .copy)
         }
@@ -2073,9 +2075,12 @@ extension DirectoryTreeViewController: NSMenuItemValidation {
             guard batchTargets(for: menuItem).isSingle else { return false }
             if case .folder = editingTarget(for: menuItem.representedObject) { return true }
             return false
-        case #selector(paste(_:)), #selector(movePaste(_:)):
+        case #selector(paste(_:)):
             return fileTargetNode(for: menuItem) != nil
-                && FileContextMenu.pasteboardHasFileURLs()
+                && PasteboardImport.availability().allowsPaste(move: false)
+        case #selector(movePaste(_:)):
+            return fileTargetNode(for: menuItem) != nil
+                && PasteboardImport.availability().allowsPaste(move: true)
         case #selector(revealInFinder(_:)):
             return fileTargetNode(for: menuItem) != nil
         case #selector(copyPathname(_:)):
