@@ -49,6 +49,17 @@ public struct ListItemCommands: Sendable, Equatable {
         allowsFileOperations && selectionCount == 1
     }
 
+    /// Open With applies to one real file outside an archive, including the archive file itself (FR-371).
+    public func allowsOpenWith(selectionCount: Int) -> Bool {
+        guard !isBrowsingArchive, selectionCount == 1 else { return false }
+        switch kind {
+        case .media, .archive:
+            return true
+        case .folder, .directory, .parent, nil:
+            return false
+        }
+    }
+
     /// Paste and Move Item Here into the list. Unavailable inside a zip and while showing search results.
     public var allowsPaste: Bool {
         !isBrowsingArchive && !isShowingSearchResults

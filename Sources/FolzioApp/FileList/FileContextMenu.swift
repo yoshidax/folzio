@@ -11,6 +11,7 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
     private let pasteItem = NSMenuItem()
     private let movePasteItem = NSMenuItem()
     private let openContainerItem = NSMenuItem()
+    private let openWithItem = NSMenuItem()
     private let goUpItem = NSMenuItem()
     private let copyPathnameItem = NSMenuItem()
     private let newFolderItem = NSMenuItem()
@@ -45,6 +46,9 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
             }
         }
         MainMenu.refreshTitles(in: menu)
+        if !isBackground {
+            host?.updateOpenWithMenu(openWithItem)
+        }
         let urls = host?.selectedFileURLs ?? []
         if urls.count == 1, let name = urls.first?.lastPathComponent {
             copyItem.title = l10n.text(.contextCopySingle, .text(name))
@@ -94,6 +98,10 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
             keyEquivalent: "",
             modifiers: [.command]
         )
+        openWithItem.title = l10n.text(.menuFileOpenWith)
+        MainMenu.bind(openWithItem, .menuFileOpenWith)
+        openWithItem.submenu = NSMenu(title: openWithItem.title)
+        menu.addItem(openWithItem)
         menu.addItem(.separator())
         addItem(
             key: .menuFileTrash,

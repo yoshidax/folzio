@@ -190,6 +190,12 @@
 /* File menu items */
 "menu.file.open" = "開く";
 
+/* File menu item and file context submenu */
+"menu.file.openWith" = "このアプリケーションで開く";
+
+/* Suffix that identifies the default application in the Open With submenu */
+"menu.file.openWith.defaultSuffix" = " （デフォルト）";
+
 /* File menu items */
 "menu.file.showContents" = "中を表示";
 
@@ -669,6 +675,12 @@
 
 /* Title shown when a file operation fails */
 "dialog.operation.failed" = "操作を完了できませんでした";
+
+/* Open With failure title */
+"dialog.openWith.failed" = "ファイルを開けませんでした";
+
+/* Open With failure details. %1$@ is the app name and %2$@ is the OS error */
+"dialog.openWith.detail" = "%1$@で開けませんでした。%2$@";
 
 /* Counts of successful and failed file operations. %1$@ and %2$@ are formatted counts */
 "dialog.operation.summary" = "成功 %1$@ 件 / 失敗 %2$@ 件";

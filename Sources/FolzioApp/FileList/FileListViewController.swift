@@ -1089,6 +1089,100 @@ final class FileListViewController: NSViewController {
         }
     }
 
+    private struct OpenWithChoice {
+        let fileURL: URL
+        let applicationURL: URL
+    }
+
+    private var openWithFileURL: URL? {
+        let urls = selectedFileURLs
+        guard !isEditingText, urls.count == 1,
+              let url = urls.first,
+              let file = model.listing.files.first(where: { $0.url == url }) else { return nil }
+        let commands = ListItemCommands(kind: file.kind, isBrowsingArchive: model.isBrowsingArchive)
+        return commands.allowsOpenWith(selectionCount: 1) ? url : nil
+    }
+
+    /// Rebuilds the context or File menu from the OS association list for the current single file (FR-368–375).
+    func updateOpenWithMenu(_ parent: NSMenuItem) {
+        let submenu = parent.submenu ?? NSMenu(title: parent.title)
+        parent.submenu = submenu
+        submenu.removeAllItems()
+        guard let fileURL = openWithFileURL else {
+            parent.isEnabled = false
+            return
+        }
+
+        var seen = Set<URL>()
+        let applications = NSWorkspace.shared.urlsForApplications(toOpen: fileURL).filter { url in
+            seen.insert(url.standardizedFileURL).inserted && FileManager.default.fileExists(atPath: url.path)
+        }
+        let defaultApplicationURL = NSWorkspace.shared.urlForApplication(toOpen: fileURL)?.standardizedFileURL
+        let defaultIndex = defaultApplicationURL.flatMap { defaultURL in
+            applications.firstIndex { $0.standardizedFileURL == defaultURL }
+        }
+        var orderedApplications = applications
+        if let defaultIndex, defaultIndex != 0 {
+            orderedApplications.insert(orderedApplications.remove(at: defaultIndex), at: 0)
+        }
+        let names = orderedApplications.map(applicationName)
+        let nameCounts = names.reduce(into: [String: Int]()) { counts, name in
+            counts[name, default: 0] += 1
+        }
+        for (index, (applicationURL, name)) in zip(orderedApplications, names).enumerated() {
+            var title = nameCounts[name, default: 0] > 1
+                ? "\(name) (\(applicationURL.deletingLastPathComponent().path))" : name
+            if index == 0, defaultIndex != nil {
+                title += l10n.text(.menuFileOpenWithDefaultSuffix)
+            }
+            let item = NSMenuItem(title: title, action: #selector(openWithApplication(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = OpenWithChoice(fileURL: fileURL, applicationURL: applicationURL)
+            if let icon = NSWorkspace.shared.icon(forFile: applicationURL.path).copy() as? NSImage {
+                icon.size = NSSize(width: 16, height: 16)
+                item.image = icon
+            }
+            submenu.addItem(item)
+            if index == 0, defaultIndex != nil, orderedApplications.count > 1 {
+                submenu.addItem(.separator())
+            }
+        }
+        parent.isEnabled = !applications.isEmpty
+    }
+
+    @objc private func openWithApplication(_ sender: NSMenuItem) {
+        guard let choice = sender.representedObject as? OpenWithChoice,
+              openWithFileURL == choice.fileURL else { return }
+        NSWorkspace.shared.open(
+            [choice.fileURL], withApplicationAt: choice.applicationURL, configuration: .init()
+        ) { [weak self] _, error in
+            guard let error else { return }
+            Task { @MainActor [weak self] in
+                self?.showOpenWithFailure(error, applicationURL: choice.applicationURL)
+            }
+        }
+    }
+
+    private func applicationName(_ url: URL) -> String {
+        let name = FileManager.default.displayName(atPath: url.path)
+        if name.isEmpty { return url.deletingPathExtension().lastPathComponent }
+        return name.lowercased().hasSuffix(".app") ? String(name.dropLast(4)) : name
+    }
+
+    private func showOpenWithFailure(_ error: Error, applicationURL: URL) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = l10n.text(.dialogOpenWithFailed)
+        let name = applicationName(applicationURL)
+        alert.informativeText = l10n.text(.dialogOpenWithDetail, .text(name), .text(error.localizedDescription))
+        alert.addButton(withTitle: l10n.text(.dialogOK))
+        if let window = view.window ?? NSApp.mainWindow {
+            alert.beginSheetModal(for: window) { _ in }
+        } else {
+            _ = alert.runModal()
+        }
+    }
+
     @objc func revealInFinder(_ sender: Any?) {
         guard selectionItemCommands.allowsFileOperations else { return }
         let urls = selectedFileURLs
@@ -1200,6 +1294,10 @@ final class FileListViewController: NSViewController {
 
 extension FileListViewController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(openWithApplication(_:)) {
+            guard let choice = menuItem.representedObject as? OpenWithChoice else { return false }
+            return openWithFileURL == choice.fileURL
+        }
         if menuItem.action == #selector(toggleImagesOnly(_:))
             || menuItem.action == #selector(toggleVideosOnly(_:))
             || menuItem.action == #selector(toggleShowsZipFiles(_:)) {

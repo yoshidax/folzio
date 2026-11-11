@@ -2,14 +2,23 @@ import AppKit
 import FolzioCore
 import FolzioLocalization
 
-/// Resets the item title that the tree changed to Remove from Favorites during validation back to Move to Trash
-/// whenever the menu opens. When the preview has focus, nothing validates it, so the previous title would
-/// otherwise remain.
+/// Refreshes File and Edit menu state when AppKit requests an update. The tree can change the Trash title during
+/// validation, and the Open With submenu depends on the current file list selection.
 @MainActor
-private final class TrashMenuTitleReset: NSObject, NSMenuDelegate {
+private final class FileMenuUpdater: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         for item in menu.items where item.action == #selector(FileListViewController.moveToTrash(_:)) {
             item.title = l10n.text(.menuFileTrash)
+        }
+        if menu.identifier?.rawValue == "menu.file",
+           let openWithItem = menu.items.first(where: { $0.identifier?.rawValue == "localization.\(TextKey.menuFileOpenWith.rawValue)" }) {
+            let target = NSApp.target(forAction: #selector(FileListViewController.open(_:)), to: nil, from: nil)
+                as? FileListViewController
+            target?.updateOpenWithMenu(openWithItem)
+            if target == nil {
+                openWithItem.submenu?.removeAllItems()
+                openWithItem.isEnabled = false
+            }
         }
     }
 }
@@ -17,7 +26,7 @@ private final class TrashMenuTitleReset: NSObject, NSMenuDelegate {
 @MainActor
 final class MainMenu {
     /// Retained because NSMenu.delegate is weak.
-    private static let trashTitleReset = TrashMenuTitleReset()
+    private static let fileMenuUpdater = FileMenuUpdater()
 
     static func bind(_ item: NSMenuItem, _ key: TextKey) {
         item.identifier = NSUserInterfaceItemIdentifier("localization.\(key.rawValue)")
@@ -100,6 +109,10 @@ final class MainMenu {
         openItem.target = nil
         fileMenu.addItem(openItem)
 
+        let openWithItem = NSMenuItem(title: l10n.text(.menuFileOpenWith), action: nil, keyEquivalent: "")
+        openWithItem.submenu = NSMenu(title: openWithItem.title)
+        fileMenu.addItem(openWithItem)
+
         let openContainerItem = NSMenuItem(
             title: l10n.text(.menuFileShowContents),
             action: #selector(FileListViewController.openFocusedItem(_:)),
@@ -161,7 +174,7 @@ final class MainMenu {
         )
         fileTrashItem.target = nil
         fileMenu.addItem(fileTrashItem)
-        fileMenu.delegate = trashTitleReset
+        fileMenu.delegate = fileMenuUpdater
         fileMenu.addItem(.separator())
         let closeItem = NSMenuItem(
             title: l10n.text(.menuFileClose),
@@ -261,7 +274,7 @@ final class MainMenu {
             action: #selector(NSText.selectAll(_:)),
             keyEquivalent: "a"
         ))
-        editMenu.delegate = trashTitleReset
+        editMenu.delegate = fileMenuUpdater
 
         let viewMenuItem = NSMenuItem()
         mainMenu.addItem(viewMenuItem)
@@ -364,6 +377,7 @@ final class MainMenu {
         let bindings: [(NSMenuItem, TextKey)] = [
             (aboutItem, .menuAppAbout), (settingsItem, .menuAppSettings), (quitItem, .menuAppQuit),
             (fileMenuItem, .menuFile), (newFolderItem, .menuFileNewFolder), (openItem, .menuFileOpen),
+            (openWithItem, .menuFileOpenWith),
             (openContainerItem, .menuFileShowContents), (goUpItem, .menuFileEnclosingFolder),
             (revealItem, .menuFileRevealInFinder), (addFavoriteItem, .menuFileAddToFavorites),
             (searchItem, .menuFileFind), (fileTrashItem, .menuFileTrash),

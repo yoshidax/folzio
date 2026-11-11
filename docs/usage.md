@@ -150,6 +150,10 @@ For a first look, see the [README](../README.md).
   - Not available while renaming, in full screen, during a slideshow, or inside a zip.
 - Double-click a media row or thumbnail to open it in its default app.
   Inside a zip, this does nothing.
+- Select one media file or zip file, then choose "Open With" from its context menu to open it in an associated app.
+  The same command is available from the File menu.
+  The default app appears first, followed by other apps, with each app's icon.
+  It is unavailable for multiple selections, folders, and items inside a zip.
 
 ### Zoom
 
@@ -490,6 +494,7 @@ For a first look, see the [README](../README.md).
 | Move the selection in the hidden file list (preview only) | Arrow keys |
 | Quick Look the selected media | Space in the file list |
 | Open media in its default app | Double-click a media row or thumbnail |
+| Open one media or zip file in an associated app | Ctrl+F2 (or Fn+Ctrl+F2) → File → Open With |
 | Zoom the preview image in / out / fit to view | ⌘+ (⌘= also works) / ⌘− / ⌘0, View menu, toolbar |
 
 ### Files
