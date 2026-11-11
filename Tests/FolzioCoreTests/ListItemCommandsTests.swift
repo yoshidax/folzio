@@ -5,6 +5,21 @@ import Testing
 struct ListItemCommandsTests {
     private static let allKinds: [ListItemKind] = [.media(.jpeg), .media(.mp4), .archive, .folder, .directory, .parent]
 
+    @Test("Open With accepts one real media or zip file")
+    func openWithEligibility() {
+        for kind in [ListItemKind.media(.jpeg), .media(.mp4), .archive] {
+            let commands = ListItemCommands(kind: kind, isBrowsingArchive: false)
+            #expect(commands.allowsOpenWith(selectionCount: 1))
+            #expect(!commands.allowsOpenWith(selectionCount: 0))
+            #expect(!commands.allowsOpenWith(selectionCount: 2))
+            #expect(!ListItemCommands(kind: kind, isBrowsingArchive: true).allowsOpenWith(selectionCount: 1))
+        }
+        for kind in [ListItemKind.folder, .directory, .parent] {
+            #expect(!ListItemCommands(kind: kind, isBrowsingArchive: false).allowsOpenWith(selectionCount: 1))
+        }
+        #expect(!ListItemCommands(kind: nil, isBrowsingArchive: false).allowsOpenWith(selectionCount: 1))
+    }
+
     // MARK: - Regular Folders (Outside a Zip)
 
     @Test("Media outside a zip supports operations but cannot be entered or navigated up from")

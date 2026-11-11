@@ -11,6 +11,8 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
     private let pasteItem = NSMenuItem()
     private let movePasteItem = NSMenuItem()
     private let openContainerItem = NSMenuItem()
+    private let openWithItem = NSMenuItem()
+    private let openWithMenu = NSMenu()
     private let goUpItem = NSMenuItem()
     private let copyPathnameItem = NSMenuItem()
     private let newFolderItem = NSMenuItem()
@@ -45,6 +47,7 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
             }
         }
         MainMenu.refreshTitles(in: menu)
+        updateOpenWithMenu(isBackground: isBackground)
         let urls = host?.selectedFileURLs ?? []
         if urls.count == 1, let name = urls.first?.lastPathComponent {
             copyItem.title = l10n.text(.contextCopySingle, .text(name))
@@ -63,6 +66,43 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         let available = PasteboardImport.availability()
         pasteItem.isEnabled = allowsPaste && available.allowsPaste(move: false)
         movePasteItem.isEnabled = allowsPaste && available.allowsPaste(move: true)
+    }
+
+    private func updateOpenWithMenu(isBackground: Bool) {
+        openWithMenu.removeAllItems()
+        guard !isBackground, let host, !host.isEditingText,
+              let url = host.selectedOpenWithURL else {
+            openWithItem.isEnabled = false
+            return
+        }
+        let applications = NSWorkspace.shared.urlsForApplications(toOpen: url)
+            .filter {
+                $0.isFileURL && $0.pathExtension.lowercased() == "app"
+                    && FileManager.default.fileExists(atPath: $0.path)
+            }
+        let uniqueApplications = Array(Set(applications)).sorted {
+            let firstName = FileManager.default.displayName(atPath: $0.path)
+            let secondName = FileManager.default.displayName(atPath: $1.path)
+            let comparison = firstName.localizedStandardCompare(secondName)
+            return comparison == .orderedSame ? $0.path < $1.path : comparison == .orderedAscending
+        }
+        for applicationURL in uniqueApplications {
+            let name = FileManager.default.displayName(atPath: applicationURL.path)
+            let item = NSMenuItem(title: name, action: #selector(FileListViewController.openWithApplication(_:)), keyEquivalent: "")
+            item.target = host
+            item.representedObject = applicationURL
+            if let icon = NSWorkspace.shared.icon(forFile: applicationURL.path).copy() as? NSImage {
+                icon.size = NSSize(width: 16, height: 16)
+                item.image = icon
+            }
+            openWithMenu.addItem(item)
+        }
+        if uniqueApplications.isEmpty {
+            let item = NSMenuItem(title: l10n.text(.contextOpenWithNoApplications), action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            openWithMenu.addItem(item)
+        }
+        openWithItem.isEnabled = true
     }
 
     private func buildMenu() {
@@ -94,6 +134,10 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
             keyEquivalent: "",
             modifiers: [.command]
         )
+        openWithItem.title = l10n.text(.contextOpenWith)
+        MainMenu.bind(openWithItem, .contextOpenWith)
+        openWithItem.submenu = openWithMenu
+        menu.addItem(openWithItem)
         menu.addItem(.separator())
         addItem(
             key: .menuFileTrash,

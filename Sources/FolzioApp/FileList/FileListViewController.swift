@@ -301,6 +301,19 @@ final class FileListViewController: NSViewController {
         model.operableSelection
     }
 
+    /// Only a single file represented by the current regular listing can be opened with another app.
+    var selectedOpenWithURL: URL? {
+        let urls = selectedFileURLs
+        guard urls.count == 1,
+              let url = urls.first,
+              let file = model.listing.files.first(where: { $0.url == url }),
+              ListItemCommands(kind: file.kind, isBrowsingArchive: model.isBrowsingArchive)
+                .allowsOpenWith(selectionCount: urls.count) else {
+            return nil
+        }
+        return url
+    }
+
     /// Availability of each command based on the focused row and current location.
     var focusedItemCommands: ListItemCommands {
         model.focusedItemCommands
@@ -1086,6 +1099,44 @@ final class FileListViewController: NSViewController {
         guard !isEditingText else { return }
         for url in selectedFileURLs {
             _ = NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc func openWithApplication(_ sender: NSMenuItem) {
+        guard !isEditingText,
+              let url = selectedOpenWithURL,
+              let applicationURL = sender.representedObject as? URL,
+              NSWorkspace.shared.urlsForApplications(toOpen: url).contains(applicationURL) else { return }
+        let window = view.window
+        let applicationName = FileManager.default.displayName(atPath: applicationURL.path)
+        NSWorkspace.shared.open(
+            [url],
+            withApplicationAt: applicationURL,
+            configuration: NSWorkspace.OpenConfiguration()
+        ) { [weak self] _, error in
+            guard let error else { return }
+            Task { @MainActor [weak self] in
+                self?.presentOpenWithError(
+                    fileName: url.lastPathComponent,
+                    applicationName: applicationName,
+                    reason: error.localizedDescription,
+                    window: window
+                )
+            }
+        }
+    }
+
+    private func presentOpenWithError(fileName: String, applicationName: String, reason: String, window: NSWindow?) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = l10n.text(.dialogOpenWithFailed)
+        alert.informativeText = l10n.text(.dialogOpenWithFailureDetail, .text(fileName), .text(applicationName))
+            + "\n\n" + reason
+        alert.addButton(withTitle: l10n.text(.dialogOK))
+        if let window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
         }
     }
 

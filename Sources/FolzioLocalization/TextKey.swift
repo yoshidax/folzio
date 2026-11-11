@@ -159,6 +159,8 @@ public enum TextKey: String, CaseIterable, Sendable {
 
     case contextCopySingle = "context.copy.single"
     case contextCopyMultiple = "context.copy.multiple"
+    case contextOpenWith = "context.openWith"
+    case contextOpenWithNoApplications = "context.openWith.noApplications"
     case contextPasteHere = "context.pasteHere"
     case contextMovePasteHere = "context.movePasteHere"
 
@@ -303,6 +305,8 @@ public enum TextKey: String, CaseIterable, Sendable {
     case dialogTreeTrashOverlapMessage = "dialog.treeTrashOverlap.message"
     case dialogCancel = "dialog.cancel"
     case dialogOK = "dialog.ok"
+    case dialogOpenWithFailed = "dialog.openWith.failed"
+    case dialogOpenWithFailureDetail = "dialog.openWith.failureDetail"
 
     // MARK: - About Dialog
 
@@ -431,7 +435,7 @@ public enum TextKey: String, CaseIterable, Sendable {
             return [.text]
         case .contextCopySingle:
             return [.text]
-        case .dialogExtensionMessage, .dialogOperationFailureLine:
+        case .dialogExtensionMessage, .dialogOperationFailureLine, .dialogOpenWithFailureDetail:
             return [.text, .text]
         case .searchBarResults, .searchBarSearching:
             return [.text, .text, .text]
@@ -747,6 +751,10 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Copy in the context menu (single item). The value is the file name"
         case .contextCopyMultiple:
             return "Copy in the context menu (multiple items). The wording changes with the count"
+        case .contextOpenWith:
+            return "Submenu in the file list context menu for opening one file with an associated application"
+        case .contextOpenWithNoApplications:
+            return "Disabled submenu item shown when no installed application is associated with the file"
         case .contextPasteHere, .contextMovePasteHere:
             return "Paste in the directory tree's context menu"
         case .toolbarHistory, .toolbarPanes, .toolbarZoomGroup, .toolbarMediaType,
@@ -876,6 +884,10 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Folder path in the confirmation modal. The value is the path"
         case .dialogConfirmContinue, .dialogCancel, .dialogOK:
             return "Dialog buttons"
+        case .dialogOpenWithFailed:
+            return "Title of the alert when the chosen application cannot open the file"
+        case .dialogOpenWithFailureDetail:
+            return "File and application names in the Open With failure alert"
         case .dialogConfirmDontAsk:
             return "The \"Don't ask again\" option in the confirmation modal"
         case .dialogFavoriteRemoveTitle, .dialogFavoriteRemoveItems,

@@ -322,6 +322,12 @@
 /* Copy in the context menu (single item). %1$@ is the file name */
 "context.copy.single" = "Copy “%1$@”";
 
+/* Open With submenu in the file list */
+"context.openWith" = "Open With";
+
+/* Disabled item when no associated application is installed */
+"context.openWith.noApplications" = "No Applications Available";
+
 /* Paste in the directory tree's context menu */
 "context.pasteHere" = "Paste Here";
 
@@ -669,6 +675,12 @@
 
 /* Title shown when a file operation fails */
 "dialog.operation.failed" = "The operation couldn’t be completed";
+
+/* Open With launch failure */
+"dialog.openWith.failed" = "Couldn’t open the file";
+
+/* File and application names in an Open With launch failure */
+"dialog.openWith.failureDetail" = "Couldn’t open “%1$@” with “%2$@”.";
 
 /* Counts of successful and failed file operations. %1$@ and %2$@ are formatted counts */
 "dialog.operation.summary" = "Succeeded: %1$@ / Failed: %2$@";
