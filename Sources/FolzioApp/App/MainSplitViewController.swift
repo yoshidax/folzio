@@ -210,7 +210,8 @@ final class MainSplitViewController: NSSplitViewController {
         self.previewViewController = PreviewViewController(
             model: model,
             decoder: decoder,
-            archiveReader: archiveReader
+            archiveReader: archiveReader,
+            settings: settings
         )
 
         super.init(nibName: nil, bundle: nil)

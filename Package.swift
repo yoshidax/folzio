@@ -38,7 +38,7 @@ let package = Package(
         ),
         .testTarget(
             name: "FolzioAppTests",
-            dependencies: ["FolzioApp", "FolzioCore"]
+            dependencies: ["FolzioApp", "FolzioCore", "FixtureKit"]
         ),
         .testTarget(
             name: "FolzioPerformanceTests",

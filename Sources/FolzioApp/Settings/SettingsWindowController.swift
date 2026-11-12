@@ -1,3 +1,9 @@
+import Foundation
+
+extension Notification.Name {
+    static let previewInteractionModeDidChange = Notification.Name("previewInteractionModeDidChange")
+}
+
 import AppKit
 import FolzioCore
 import FolzioLocalization
@@ -73,6 +79,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
     private let loopCheckbox: NSButton
     private let confirmFileOperationsCheckbox: NSButton
     private let confirmFileOperationsNote = NSTextField(wrappingLabelWithString: "")
+    private let previewHeader = NSTextField(labelWithString: "")
+    private let previewModeLabel = NSTextField(labelWithString: "")
+    private let previewModePopup = KeyViewPopUpButton(frame: .zero, pullsDown: false)
     private let languagePopup = KeyViewPopUpButton(frame: .zero, pullsDown: false)
     private let languageLabel = NSTextField(labelWithString: "")
     private let videoHeader = NSTextField(labelWithString: "")
@@ -132,7 +141,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         generalView = makeContentView()
         window.contentView = makeRootView()
         window.autorecalculatesKeyViewLoop = false
-        languagePopup.nextKeyView = autoplayCheckbox
+        languagePopup.nextKeyView = previewModePopup
+        previewModePopup.nextKeyView = autoplayCheckbox
         autoplayCheckbox.nextKeyView = loopCheckbox
         loopCheckbox.nextKeyView = confirmFileOperationsCheckbox
         confirmFileOperationsCheckbox.nextKeyView = intervalField
@@ -166,6 +176,13 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         transitionPopup.target = self
         transitionPopup.action = #selector(selectTransition(_:))
         transitionPopup.setAccessibilityLabel(l10n.text(.settingsTransition))
+
+        for mode in [PreviewInteractionMode.wheelZoom, .traditional] {
+            previewModePopup.addItem(withTitle: "")
+            previewModePopup.lastItem?.representedObject = mode.rawValue
+        }
+        previewModePopup.target = self
+        previewModePopup.action = #selector(selectPreviewMode(_:))
 
         languagePopup.addItem(withTitle: l10n.text(.settingsLanguageEnglish))
         languagePopup.lastItem?.representedObject = DisplayLanguageSetting.english.rawValue
@@ -213,6 +230,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
             frame: NSRect(x: 0, y: 0, width: Self.contentWidth, height: 340)
         )
 
+        previewHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+
         videoHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
 
         fileOperationsHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
@@ -223,6 +242,11 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         languageRow.orientation = .horizontal
         languageRow.alignment = .firstBaseline
         languageRow.spacing = 8
+
+        let previewModeRow = NSStackView(views: [previewModeLabel, previewModePopup])
+        previewModeRow.orientation = .horizontal
+        previewModeRow.alignment = .firstBaseline
+        previewModeRow.spacing = 8
 
         let intervalRow = NSStackView(views: [
             intervalLabel,
@@ -256,6 +280,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
 
         let stack = NSStackView(views: [
             languageRow,
+            previewHeader,
+            previewModeRow,
             videoHeader,
             autoplayCheckbox,
             loopCheckbox,
@@ -271,6 +297,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         stack.alignment = .leading
         stack.spacing = Self.itemSpacing
         stack.setCustomSpacing(Self.sectionSpacing, after: languageRow)
+        stack.setCustomSpacing(Self.sectionSpacing, after: previewModeRow)
         stack.setCustomSpacing(Self.sectionSpacing, after: loopCheckbox)
         stack.setCustomSpacing(Self.noteSpacing, after: confirmFileOperationsCheckbox)
         stack.setCustomSpacing(Self.sectionSpacing, after: noteContainer)
@@ -398,6 +425,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         }) {
             languagePopup.select(item)
         }
+        if let item = previewModePopup.itemArray.first(where: { $0.representedObject as? String == store.previewInteractionMode.rawValue }) {
+            previewModePopup.select(item)
+        }
         let playback = store.playback
         autoplayCheckbox.state = playback.autoplay ? .on : .off
         loopCheckbox.state = playback.loop ? .on : .off
@@ -413,6 +443,13 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         }
     }
 
+    @objc private func selectPreviewMode(_ sender: NSPopUpButton) {
+        guard let raw = sender.selectedItem?.representedObject as? String,
+              let mode = PreviewInteractionMode(rawValue: raw) else { return }
+        store.previewInteractionMode = mode
+        NotificationCenter.default.post(name: .previewInteractionModeDidChange, object: nil)
+    }
+
     @objc private func selectLanguage(_ sender: NSPopUpButton) {
         guard let raw = sender.selectedItem?.representedObject as? String,
               let language = DisplayLanguageSetting(rawValue: raw) else { return }
@@ -424,6 +461,11 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         tabSelector.setLabel(l10n.text(.settingsTabGeneral), forSegment: Tab.general.rawValue)
         tabSelector.setLabel(l10n.text(.settingsTabShortcuts), forSegment: Tab.shortcuts.rawValue)
         tabSelector.setAccessibilityLabel(l10n.text(.settingsWindow))
+        previewHeader.stringValue = l10n.text(.settingsPreview)
+        previewModeLabel.stringValue = l10n.text(.settingsPreviewMode)
+        previewModePopup.setAccessibilityLabel(l10n.text(.settingsPreviewMode))
+        previewModePopup.item(at: 0)?.title = l10n.text(.settingsPreviewModeWheel)
+        previewModePopup.item(at: 1)?.title = l10n.text(.settingsPreviewModeTraditional)
         languageLabel.stringValue = l10n.text(.settingsLanguage)
         languagePopup.setAccessibilityLabel(l10n.text(.settingsLanguage))
         videoHeader.stringValue = l10n.text(.settingsVideo)

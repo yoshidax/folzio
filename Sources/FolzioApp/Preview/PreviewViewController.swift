@@ -6,6 +6,7 @@ import os
 
 @MainActor
 final class PreviewViewController: NSViewController {
+    private let settings: SettingsStore
     private let model: BrowserModel
     private let decoder: any ImageDecoding
     private let archiveReader: any ArchiveReading
@@ -66,7 +67,8 @@ final class PreviewViewController: NSViewController {
         )
     }
 
-    init(model: BrowserModel, decoder: any ImageDecoding, archiveReader: any ArchiveReading) {
+    init(model: BrowserModel, decoder: any ImageDecoding, archiveReader: any ArchiveReading, settings: SettingsStore = SettingsStore()) {
+        self.settings = settings
         self.model = model
         self.decoder = decoder
         self.archiveReader = archiveReader
@@ -142,16 +144,16 @@ final class PreviewViewController: NSViewController {
         notifyZoomAvailabilityIfChanged()
     }
 
-    private func applyZoomChange(_ changed: Bool) -> Bool {
+    private func applyZoomChange(_ changed: Bool, animateWheel: Bool = false, anchor: CGPoint? = nil) -> Bool {
         guard changed else { return false }
-        applyCurrentZoom(announce: true)
+        applyCurrentZoom(announce: true, animateWheel: animateWheel, anchor: anchor)
         notifyZoomAvailabilityIfChanged()
         return true
     }
 
-    private func applyCurrentZoom(announce: Bool) {
+    private func applyCurrentZoom(announce: Bool, animateWheel: Bool = false, anchor: CGPoint? = nil) {
         let state = transitionSignposter.beginInterval("PreviewZoomApply")
-        imageView.applyZoom(zoomTracker.level, announce: announce)
+        imageView.applyZoom(zoomTracker.level, announce: announce, animateWheel: animateWheel, anchor: anchor)
         transitionSignposter.endInterval("PreviewZoomApply", state)
     }
 
@@ -175,6 +177,11 @@ final class PreviewViewController: NSViewController {
     }
 
     override func loadView() {
+        imageView.interactionMode = settings.previewInteractionMode
+        imageView.onScale = { [weak self] factor, animateWheel, anchor in
+            guard let self, self.zoomAvailability.isAvailable else { return }
+            _ = self.applyZoomChange(self.zoomTracker.scale(by: factor), animateWheel: animateWheel, anchor: anchor)
+        }
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.onDisplayedImageChange = { [weak self] in
             self?.notifyZoomAvailabilityIfChanged()
@@ -237,9 +244,14 @@ final class PreviewViewController: NSViewController {
             name: NSWindow.didChangeScreenNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(self, selector: #selector(previewInteractionModeDidChange), name: .previewInteractionModeDidChange, object: nil)
         updateFromModel()
         observePreview()
         observeListingForEmptyPreview()
+    }
+
+    @objc private func previewInteractionModeDidChange() {
+        imageView.interactionMode = settings.previewInteractionMode
     }
 
     @objc private func displayLanguageDidChange() {

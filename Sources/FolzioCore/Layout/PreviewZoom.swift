@@ -2,37 +2,42 @@ import CoreGraphics
 import Foundation
 
 /// Preview zoom level (FR-133). 100% is the fit-to-window display from FR-028, not actual size (A-62).
-/// Accepts only multiples of 25% between 25% and 800% and does not change at the limits.
+/// Supports continuous scaling between 25% and 800%.
 public struct PreviewZoom: Sendable, Equatable, Comparable {
     public static let step = 25
     public static let minimum = 25
     public static let maximum = 800
     public static let fit = PreviewZoom(percentage: 100)!
 
-    public let percentage: Int
+    public let scale: CGFloat
+    public var percentage: Int { Int((scale * 100).rounded()) }
 
     public init?(percentage: Int) {
         guard (Self.minimum...Self.maximum).contains(percentage),
               percentage % Self.step == 0 else { return nil }
-        self.percentage = percentage
+        self.scale = CGFloat(percentage) / 100
     }
 
-    /// Scale applied to the fitted rectangle
-    public var scale: CGFloat { CGFloat(percentage) / 100 }
+    private init(scale: CGFloat) { self.scale = scale }
 
-    public var canZoomIn: Bool { percentage < Self.maximum }
-    public var canZoomOut: Bool { percentage > Self.minimum }
+    public func scaled(by factor: CGFloat) -> PreviewZoom {
+        guard factor.isFinite, factor > 0 else { return self }
+        return PreviewZoom(scale: min(8, max(0.25, scale * factor)))
+    }
+
+    public var canZoomIn: Bool { scale < 8 }
+    public var canZoomOut: Bool { scale > 0.25 }
 
     public func zoomedIn() -> PreviewZoom {
-        PreviewZoom(percentage: percentage + Self.step) ?? self
+        PreviewZoom(scale: min(8, scale + 0.25))
     }
 
     public func zoomedOut() -> PreviewZoom {
-        PreviewZoom(percentage: percentage - Self.step) ?? self
+        PreviewZoom(scale: max(0.25, scale - 0.25))
     }
 
     public static func < (lhs: PreviewZoom, rhs: PreviewZoom) -> Bool {
-        lhs.percentage < rhs.percentage
+        lhs.scale < rhs.scale
     }
 }
 
@@ -68,6 +73,11 @@ public struct PreviewZoomTracker: Sendable, Equatable {
     @discardableResult
     public mutating func zoomOut() -> Bool {
         update(level.zoomedOut())
+    }
+
+    @discardableResult
+    public mutating func scale(by factor: CGFloat) -> Bool {
+        update(level.scaled(by: factor))
     }
 
     @discardableResult

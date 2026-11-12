@@ -4,6 +4,17 @@ import Testing
 
 @Suite("PreviewZoom")
 struct PreviewZoomTests {
+    @Test("Continuous zoom scales proportionally, clamps, and retains command steps")
+    func continuousZoom() {
+        let first = PreviewZoom.fit.scaled(by: 1.05)
+        #expect(abs(first.scale - 1.05) < 0.000001)
+        #expect(abs(first.scaled(by: 1.05).scale - 1.1025) < 0.000001)
+        #expect(abs(first.zoomedIn().scale - 1.3) < 0.000001)
+        #expect(first.scaled(by: 100).scale == 8)
+        #expect(first.scaled(by: 0.001).scale == 0.25)
+        #expect(first.scaled(by: .nan) == first)
+    }
+
     @Test("Step, limits, and fit constants")
     func constants() {
         #expect(PreviewZoom.step == 25)

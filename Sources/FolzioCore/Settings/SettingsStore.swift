@@ -6,8 +6,14 @@ public enum DisplayLanguageSetting: String, CaseIterable, Sendable {
     case japanese = "ja"
 }
 
+public enum PreviewInteractionMode: String, Sendable {
+    case wheelZoom = "wheelZoom"
+    case traditional = "traditional"
+}
+
 public struct SettingsStore {
     private enum Keys {
+        static let previewInteractionMode = "preview.interactionMode"
         static let displayLanguage = "appearance.language"
         static let displayMode = "view.displayMode"
         static let thumbnailSize = "view.thumbnailSize"
@@ -35,6 +41,11 @@ public struct SettingsStore {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+    }
+
+    public var previewInteractionMode: PreviewInteractionMode {
+        get { (defaults.string(forKey: Keys.previewInteractionMode)).flatMap(PreviewInteractionMode.init(rawValue:)) ?? .wheelZoom }
+        nonmutating set { defaults.set(newValue.rawValue, forKey: Keys.previewInteractionMode) }
     }
 
     public var displayLanguage: DisplayLanguageSetting {

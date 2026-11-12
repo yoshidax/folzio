@@ -194,6 +194,10 @@ public enum TextKey: String, CaseIterable, Sendable {
     // MARK: - Settings Window
 
     case settingsWindow = "settings.window"
+    case settingsPreview = "settings.preview"
+    case settingsPreviewMode = "settings.preview.mode"
+    case settingsPreviewModeWheel = "settings.preview.mode.wheel"
+    case settingsPreviewModeTraditional = "settings.preview.mode.traditional"
     case settingsLanguage = "settings.language"
     case settingsLanguageEnglish = "settings.language.english"
     case settingsLanguageJapanese = "settings.language.japanese"
@@ -811,11 +815,13 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Shown in place of the key of a command that has no shortcut, in the Settings window, the shortcut reference, and tooltips"
         case .settingsWindow:
             return "Settings window title"
+        case .settingsPreviewMode, .settingsPreviewModeWheel, .settingsPreviewModeTraditional:
+            return "Preview interaction mode setting and options"
         case .settingsLanguage:
             return "Display language label in the Settings window"
         case .settingsLanguageEnglish, .settingsLanguageJapanese:
             return "Display language options. Each language name is shown in that language"
-        case .settingsVideo, .settingsFileOperations, .settingsSlideshow:
+        case .settingsPreview, .settingsVideo, .settingsFileOperations, .settingsSlideshow:
             return "Section headings in the Settings window"
         case .settingsAutoplay, .settingsLoop, .settingsConfirm, .settingsRepeat:
             return "Checkboxes in the Settings window"

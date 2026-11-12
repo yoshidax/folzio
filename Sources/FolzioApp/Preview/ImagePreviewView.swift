@@ -34,6 +34,17 @@ final class ImagePreviewView: NSView {
         }
     }
 
+    var interactionMode: PreviewInteractionMode = .wheelZoom {
+        didSet {
+            if interactionMode != .wheelZoom { endDrag() }
+            needsLayout = true; layoutSubtreeIfNeeded()
+        }
+    }
+    var onScale: ((CGFloat, Bool, CGPoint) -> Void)?
+    private var dragPoint: NSPoint?
+    private var draggingImage = false
+    private var panKeys = PreviewPanKeys()
+
     private let contentLayer = CALayer()
     private let messageStack = NSStackView()
     private let nameLabel = NSTextField(labelWithString: "")
@@ -51,6 +62,9 @@ final class ImagePreviewView: NSView {
     private var displayedImage: CGImage? {
         didSet {
             if displayedImage == nil {
+                panKeys.reset()
+                endDrag()
+                contentLayer.removeAnimation(forKey: "wheelZoom")
                 horizontalScroller.isHidden = true
                 verticalScroller.isHidden = true
             }
@@ -132,6 +146,10 @@ final class ImagePreviewView: NSView {
             messageStack.widthAnchor.constraint(lessThanOrEqualToConstant: 440),
         ])
 
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(windowDidResignKey(_:)), name: NSWindow.didResignKeyNotification, object: nil
+        )
+
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(accessibilityDisplayOptionsDidChange(_:)),
@@ -151,8 +169,11 @@ final class ImagePreviewView: NSView {
         let size = fittedFrame().size
         scrollLayout = PreviewScrollLayout(imageSize: size, viewport: bounds.size, center: scrollCenter)
         scrollCenter = scrollLayout.center
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         contentLayer.frame = scrollLayout.frame
         contentLayer.contentsScale = backingScale
+        CATransaction.commit()
         updateScrollbars()
     }
 
@@ -163,13 +184,33 @@ final class ImagePreviewView: NSView {
 
     /// Applies the zoom level. Set `announce` only for changes from explicit actions to announce the new level
     /// (FR-138).
-    func applyZoom(_ zoom: PreviewZoom, announce: Bool) {
+    func applyZoom(_ zoom: PreviewZoom, announce: Bool, animateWheel: Bool = false, anchor: CGPoint? = nil) {
         let changed = zoom != self.zoom
+        let presentation = contentLayer.presentation() ?? contentLayer
+        let previousBounds = presentation.bounds
+        let previousPosition = presentation.position
         self.zoom = zoom
+        if changed, let anchor, isShowingImage {
+            scrollCenter = scrollLayout.zoomed(to: fittedFrame().size, viewport: bounds.size, anchor: anchor).center
+        }
         updateAccessibilityValue()
         if changed {
             needsLayout = true
             layoutSubtreeIfNeeded()
+            contentLayer.removeAnimation(forKey: "wheelZoom")
+            if animateWheel, isShowingImage, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                let bounds = CABasicAnimation(keyPath: "bounds")
+                bounds.fromValue = NSValue(rect: previousBounds)
+                bounds.toValue = NSValue(rect: contentLayer.bounds)
+                let position = CABasicAnimation(keyPath: "position")
+                position.fromValue = NSValue(point: previousPosition)
+                position.toValue = NSValue(point: contentLayer.position)
+                let animation = CAAnimationGroup()
+                animation.animations = [bounds, position]
+                animation.duration = 0.12
+                animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                contentLayer.add(animation, forKey: "wheelZoom")
+            }
         }
         guard announce, changed, isShowingImage else { return }
         NSAccessibility.post(
@@ -189,8 +230,8 @@ final class ImagePreviewView: NSView {
 
     private func updateScrollbars() {
         let thickness = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
-        let horizontal = scrollLayout.horizontal
-        let vertical = scrollLayout.vertical
+        let horizontal = interactionMode == .traditional && scrollLayout.horizontal
+        let vertical = interactionMode == .traditional && scrollLayout.vertical
         horizontalScroller.isHidden = !horizontal
         verticalScroller.isHidden = !vertical
         horizontalScroller.frame = CGRect(x: 0, y: 0, width: max(0, bounds.width - (vertical ? thickness : 0)), height: thickness)
@@ -209,34 +250,101 @@ final class ImagePreviewView: NSView {
 
     private func moveScroll(x: CGFloat, y: CGFloat) {
         guard isShowingImage, scrollLayout.frame.width > 0, scrollLayout.frame.height > 0 else { return }
-        scrollCenter.x += x / scrollLayout.frame.width
-        scrollCenter.y += y / scrollLayout.frame.height
+        contentLayer.removeAnimation(forKey: "wheelZoom")
+        scrollCenter = scrollLayout.moved(x: x, y: y, viewport: bounds.size).center
         needsLayout = true
         layoutSubtreeIfNeeded()
     }
 
     override func scrollWheel(with event: NSEvent) {
-        guard isShowingImage, scrollLayout.horizontal || scrollLayout.vertical else {
-            super.scrollWheel(with: event)
-            return
+        guard isShowingImage else { super.scrollWheel(with: event); return }
+        if interactionMode == .wheelZoom && event.phase.isEmpty && event.momentumPhase.isEmpty {
+            guard event.scrollingDeltaY != 0 else { return }
+            onScale?(pow(1.05, event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.1 : 1)), true,
+                     convert(event.locationInWindow, from: nil))
+        } else {
+            moveScroll(x: -event.scrollingDeltaX, y: event.scrollingDeltaY)
         }
-        // NSEvent deltas already reflect the OS scroll direction setting.
-        // This view uses a bottom-left origin, so the sign differs between horizontal and vertical image coordinates.
-        moveScroll(x: -event.scrollingDeltaX, y: event.scrollingDeltaY)
+    }
+
+    override func magnify(with event: NSEvent) {
+        guard isShowingImage, interactionMode == .wheelZoom else { return }
+        onScale?(1 + event.magnification, false, convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard interactionMode == .wheelZoom, isShowingImage, event.clickCount == 1 else {
+            super.mouseDown(with: event); return
+        }
+        dragPoint = convert(event.locationInWindow, from: nil)
+        draggingImage = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard interactionMode == .wheelZoom, isShowingImage, let previous = dragPoint else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        if !draggingImage {
+            guard hypot(point.x - previous.x, point.y - previous.y) >= 3 else { return }
+            draggingImage = true
+            NSCursor.closedHand.push()
+        }
+        moveScroll(x: previous.x - point.x, y: previous.y - point.y)
+        dragPoint = point
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        endDrag()
+    }
+
+    private func endDrag() {
+        if draggingImage { NSCursor.pop() }
+        draggingImage = false
+        dragPoint = nil
+    }
+
+    private func panKey(for event: NSEvent) -> PreviewPanKey? {
+        switch event.specialKey {
+        case .leftArrow: .left
+        case .rightArrow: .right
+        case .upArrow: .up
+        case .downArrow: .down
+        default: nil
+        }
     }
 
     override func keyDown(with event: NSEvent) {
         let modifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
-        if modifiers == .option, isShowingImage {
-            switch event.specialKey {
-            case .leftArrow: moveScroll(x: -40, y: 0); return
-            case .rightArrow: moveScroll(x: 40, y: 0); return
-            case .upArrow: moveScroll(x: 0, y: 40); return
-            case .downArrow: moveScroll(x: 0, y: -40); return
-            default: break
-            }
+        guard modifiers == .option, isShowingImage, let key = panKey(for: event) else {
+            super.keyDown(with: event)
+            return
         }
-        super.keyDown(with: event)
+        panKeys.press(key)
+        let direction = panKeys.direction
+        moveScroll(x: direction.x * 40, y: direction.y * 40)
+    }
+
+    override func keyUp(with event: NSEvent) {
+        if let key = panKey(for: event) {
+            panKeys.release(key)
+        }
+        super.keyUp(with: event)
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
+        if modifiers != .option { panKeys.reset() }
+        super.flagsChanged(with: event)
+    }
+
+    @objc private func windowDidResignKey(_ notification: Notification) {
+        guard let changedWindow = notification.object as? NSWindow, changedWindow === window else { return }
+        panKeys.reset()
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { panKeys.reset() }
+        return resigned
     }
 
     @objc private func scrollbarChanged(_ sender: NSScroller) {

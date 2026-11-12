@@ -1034,3 +1034,8 @@
 "menu.edit.cancelReceiving" = "受け取りを取り消す";
 
 "shortcuts.condition.cancelReceiving" = "受け取り中。文字の編集・シート・ダイアログの外で有効";
+
+"settings.preview" = "プレビュー";
+"settings.preview.mode" = "画像の操作";
+"settings.preview.mode.wheel" = "ホイールズームとドラッグ";
+"settings.preview.mode.traditional" = "スクロール";

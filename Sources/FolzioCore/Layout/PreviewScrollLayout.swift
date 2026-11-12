@@ -29,4 +29,27 @@ public struct PreviewScrollLayout: Sendable {
         horizontal = x.2
         vertical = y.2
     }
+    /// Returns a new layout after moving the viewport center in image coordinates.
+    public func moved(x: CGFloat, y: CGFloat, viewport: CGSize) -> PreviewScrollLayout {
+        guard frame.width > 0, frame.height > 0, x.isFinite, y.isFinite else { return self }
+        return PreviewScrollLayout(
+            imageSize: frame.size, viewport: viewport,
+            center: CGPoint(x: center.x + x / frame.width, y: center.y + y / frame.height)
+        )
+    }
+
+    /// Keeps the image point under the anchor fixed when possible, clamping at the image edges.
+    public func zoomed(to imageSize: CGSize, viewport: CGSize, anchor: CGPoint) -> PreviewScrollLayout {
+        guard frame.width > 0, frame.height > 0,
+              [imageSize.width, imageSize.height, viewport.width, viewport.height].allSatisfy({ $0.isFinite && $0 > 0 }),
+              anchor.x.isFinite, anchor.y.isFinite else { return self }
+        let imageX = (anchor.x - frame.minX) / frame.width
+        let imageY = (anchor.y - frame.minY) / frame.height
+        let newCenter = CGPoint(
+            x: imageX + (viewport.width / 2 - anchor.x) / imageSize.width,
+            y: imageY + (viewport.height / 2 - anchor.y) / imageSize.height
+        )
+        return PreviewScrollLayout(imageSize: imageSize, viewport: viewport, center: newCenter)
+    }
+
 }

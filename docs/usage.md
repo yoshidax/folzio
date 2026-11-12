@@ -162,9 +162,11 @@ For a first look, see the [README](../README.md).
     "Zoom In" (拡大), "Zoom to Fit" (表示領域に合わせる), and "Zoom Out" (縮小)
   - The View menu
   - ⌘+ / ⌘- / ⌘0 (⌘= also zooms in)
-- The fit size counts as 100%. The zoom ranges from 25% to 800% in 25% steps.
-- Images zoom around their center, and parts that overflow are not shown.
-  There is no scrolling, panning, pinching, or zoom-level readout.
+- The fit size counts as 100%; zoom ranges from 25% to 800%. Toolbar, menu, and keyboard commands change it by 25 percentage points.
+- Settings offers two preview control modes and saves the selection. The default is wheel zoom and drag.
+  - Wheel zoom and drag: turn the wheel to zoom by approximately 5% per notch, drag to move the image, or use a trackpad pinch to zoom and two-finger scroll to move. Scroll bars are hidden.
+  - Scroll: scroll or use the scroll bars to move the image; scroll bars appear on overflowing axes.
+- In either mode, Option + arrow keys move the image; hold two perpendicular arrow keys to move diagonally. Wheel and pinch zoom use the pointer as the anchor; other zoom commands use the viewport center. There is no visible zoom-level readout.
 - Available in the three-pane layout, the preview-only layout, and full screen.
 - Disabled for videos, an empty preview, images that cannot be displayed, and the file-list-only layout.
 - The zoom resets to 100% when you switch to another image (including slideshow auto-advance)
