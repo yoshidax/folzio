@@ -3,6 +3,7 @@ import FolzioCore
 import FolzioLocalization
 
 extension Notification.Name {
+    static let previewInteractionModeDidChange = Notification.Name("Folzio.previewInteractionModeDidChange")
     static let displayLanguageDidChange = Notification.Name("Folzio.displayLanguageDidChange")
 }
 

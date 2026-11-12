@@ -8,6 +8,31 @@ public struct PreviewScrollLayout: Sendable {
     public let horizontal: Bool
     public let vertical: Bool
 
+    public func resized(imageSize: CGSize, viewport: CGSize, anchoredAt point: CGPoint) -> PreviewScrollLayout {
+        guard [frame.width, frame.height, imageSize.width, imageSize.height, viewport.width, viewport.height]
+            .allSatisfy({ $0.isFinite && $0 > 0 }),
+              point.x.isFinite, point.y.isFinite else {
+            return self
+        }
+        let relative = CGPoint(x: (point.x - frame.minX) / frame.width, y: (point.y - frame.minY) / frame.height)
+        let nextCenter = CGPoint(
+            x: relative.x + (viewport.width / 2 - point.x) / imageSize.width,
+            y: relative.y + (viewport.height / 2 - point.y) / imageSize.height
+        )
+        guard nextCenter.x.isFinite, nextCenter.y.isFinite else { return self }
+        return PreviewScrollLayout(imageSize: imageSize, viewport: viewport, center: nextCenter)
+    }
+
+    public func moved(x: CGFloat, y: CGFloat, viewport: CGSize) -> PreviewScrollLayout {
+        guard x.isFinite, y.isFinite,
+              [frame.width, frame.height, viewport.width, viewport.height].allSatisfy({ $0.isFinite && $0 > 0 }) else {
+            return self
+        }
+        let nextCenter = CGPoint(x: center.x + x / frame.width, y: center.y + y / frame.height)
+        guard nextCenter.x.isFinite, nextCenter.y.isFinite else { return self }
+        return PreviewScrollLayout(imageSize: frame.size, viewport: viewport, center: nextCenter)
+    }
+
     public init(imageSize: CGSize, viewport: CGSize, center: CGPoint) {
         guard [imageSize.width, imageSize.height, viewport.width, viewport.height].allSatisfy({ $0.isFinite && $0 > 0 }) else {
             frame = .zero

@@ -12,12 +12,12 @@ struct PreviewZoomTests {
         #expect(PreviewZoom.fit.percentage == 100)
     }
 
-    @Test("Accepts only multiples of 25 between 25 and 800", arguments: [25, 50, 100, 775, 800])
+    @Test("Accepts valid percentages", arguments: [25, 50, 100, 775, 800])
     func acceptsValidPercentages(percentage: Int) {
-        #expect(PreviewZoom(percentage: percentage)?.percentage == percentage)
+        #expect(PreviewZoom(percentage: percentage)?.percentage == Double(percentage))
     }
 
-    @Test("Rejects out-of-range values and values that are not multiples of 25", arguments: [0, -25, 30, 101, 799, 801])
+    @Test("Rejects out-of-range values", arguments: [0, -25, 801])
     func rejectsInvalidPercentages(percentage: Int) {
         #expect(PreviewZoom(percentage: percentage) == nil)
     }
@@ -42,7 +42,7 @@ struct PreviewZoomTests {
     @Test("Zoom out subtracts 25 points and stops at 25%")
     func zoomsOut() throws {
         var zoom = try #require(PreviewZoom(percentage: 150))
-        var steps: [Int] = []
+        var steps: [Double] = []
         for _ in 0..<5 {
             zoom = zoom.zoomedOut()
             steps.append(zoom.percentage)
@@ -76,5 +76,32 @@ struct PreviewZoomTests {
         #expect(small < .fit)
         #expect(PreviewZoom.fit < large)
         #expect(!(large < small))
+    }
+    @Test("Wheel zoom is reversible and clamps at bounds")
+    func wheelZoom() throws {
+        let initial = try #require(PreviewZoom(percentage: 110.5))
+        let enlarged = initial.scaled(by: 1.1)
+        #expect(abs(enlarged.percentage - 121.55) < 0.0001)
+        #expect(abs(enlarged.scaled(by: 1 / 1.1).percentage - initial.percentage) < 0.0001)
+        #expect(initial.scaled(by: 100).percentage == 800)
+        #expect(initial.scaled(by: 0.01).percentage == 25)
+        #expect(initial.zoomedIn().percentage == 135.5)
+        #expect(PreviewZoom(percentage: Double.nan) == nil)
+    }
+
+    @Test("Reversing a continuous pinch at either limit immediately moves away without a jump")
+    func pinchReversesAtLimits() throws {
+        var zoom = PreviewZoom.fit
+        for _ in 0..<100 { zoom = zoom.pinched(by: -0.05) }
+        #expect(zoom.percentage == 25)
+        let aboveMinimum = zoom.pinched(by: 0.05)
+        #expect(abs(aboveMinimum.percentage - 26.25) < 0.0001)
+
+        zoom = PreviewZoom.fit
+        for _ in 0..<100 { zoom = zoom.pinched(by: 0.05) }
+        #expect(zoom.percentage == 800)
+        let belowMaximum = zoom.pinched(by: -0.05)
+        #expect(abs(belowMaximum.percentage - 760) < 0.0001)
+        #expect(zoom.pinched(by: .nan) == zoom)
     }
 }

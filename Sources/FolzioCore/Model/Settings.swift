@@ -1,5 +1,10 @@
 import Foundation
 
+public enum PreviewInteractionMode: String, Sendable, CaseIterable {
+    case wheelZoomPan
+    case scroll
+}
+
 public struct ViewSettings: Sendable, Equatable {
     public static let defaultThumbnailSize: Double = 128
     public static let minimumThumbnailSize: Double = 48

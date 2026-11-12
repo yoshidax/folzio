@@ -177,6 +177,31 @@ struct ListItemCommandsTests {
         }
     }
 
+    // MARK: - Open With (FR-371)
+
+    @Test("Open With accepts one media or archive file outside a zip, including search results")
+    func openWithEligibleFiles() {
+        for kind in [ListItemKind.media(.jpeg), .media(.mp4), .archive] {
+            for search in [false, true] {
+                let commands = ListItemCommands(kind: kind, isBrowsingArchive: false, isShowingSearchResults: search)
+                #expect(commands.allowsOpenWith(selectionCount: 1))
+                #expect(!commands.allowsOpenWith(selectionCount: 0))
+                #expect(!commands.allowsOpenWith(selectionCount: 2))
+            }
+        }
+    }
+
+    @Test("Open With excludes folders, parent rows, and every item inside a zip")
+    func openWithExcludedItems() {
+        for kind in [ListItemKind.folder, .directory, .parent] {
+            #expect(!ListItemCommands(kind: kind, isBrowsingArchive: false).allowsOpenWith(selectionCount: 1))
+        }
+        #expect(!ListItemCommands(kind: nil, isBrowsingArchive: false).allowsOpenWith(selectionCount: 1))
+        for kind in Self.allKinds {
+            #expect(!ListItemCommands(kind: kind, isBrowsingArchive: true).allowsOpenWith(selectionCount: 1))
+        }
+    }
+
     // MARK: - Copy as Pathname (FR-181, FR-183)
 
     @Test("Copy as Pathname needs exactly one selected non-parent row outside a zip")

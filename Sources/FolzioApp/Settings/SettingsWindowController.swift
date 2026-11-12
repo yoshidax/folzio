@@ -75,6 +75,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
     private let confirmFileOperationsNote = NSTextField(wrappingLabelWithString: "")
     private let languagePopup = KeyViewPopUpButton(frame: .zero, pullsDown: false)
     private let languageLabel = NSTextField(labelWithString: "")
+    private let previewHeader = NSTextField(labelWithString: "")
+    private let previewModeLabel = NSTextField(labelWithString: "")
+    private let previewModePopup = KeyViewPopUpButton(frame: .zero, pullsDown: false)
     private let videoHeader = NSTextField(labelWithString: "")
     private let fileOperationsHeader = NSTextField(labelWithString: "")
     private let slideshowHeader = NSTextField(labelWithString: "")
@@ -132,7 +135,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         generalView = makeContentView()
         window.contentView = makeRootView()
         window.autorecalculatesKeyViewLoop = false
-        languagePopup.nextKeyView = autoplayCheckbox
+        languagePopup.nextKeyView = previewModePopup
+        previewModePopup.nextKeyView = autoplayCheckbox
         autoplayCheckbox.nextKeyView = loopCheckbox
         loopCheckbox.nextKeyView = confirmFileOperationsCheckbox
         confirmFileOperationsCheckbox.nextKeyView = intervalField
@@ -173,6 +177,12 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         languagePopup.lastItem?.representedObject = DisplayLanguageSetting.japanese.rawValue
         languagePopup.target = self
         languagePopup.action = #selector(selectLanguage(_:))
+        for mode in PreviewInteractionMode.allCases {
+            previewModePopup.addItem(withTitle: "")
+            previewModePopup.lastItem?.representedObject = mode.rawValue
+        }
+        previewModePopup.target = self
+        previewModePopup.action = #selector(selectPreviewMode(_:))
         NotificationCenter.default.addObserver(
             self, selector: #selector(updateLocalizedLabels), name: .displayLanguageDidChange, object: nil
         )
@@ -213,6 +223,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
             frame: NSRect(x: 0, y: 0, width: Self.contentWidth, height: 340)
         )
 
+        previewHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
         videoHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
 
         fileOperationsHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
@@ -223,6 +234,11 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         languageRow.orientation = .horizontal
         languageRow.alignment = .firstBaseline
         languageRow.spacing = 8
+
+        let previewRow = NSStackView(views: [previewModeLabel, previewModePopup])
+        previewRow.orientation = .horizontal
+        previewRow.alignment = .firstBaseline
+        previewRow.spacing = 8
 
         let intervalRow = NSStackView(views: [
             intervalLabel,
@@ -256,6 +272,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
 
         let stack = NSStackView(views: [
             languageRow,
+            previewHeader,
+            previewRow,
             videoHeader,
             autoplayCheckbox,
             loopCheckbox,
@@ -271,6 +289,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         stack.alignment = .leading
         stack.spacing = Self.itemSpacing
         stack.setCustomSpacing(Self.sectionSpacing, after: languageRow)
+        stack.setCustomSpacing(Self.sectionSpacing, after: previewRow)
         stack.setCustomSpacing(Self.sectionSpacing, after: loopCheckbox)
         stack.setCustomSpacing(Self.noteSpacing, after: confirmFileOperationsCheckbox)
         stack.setCustomSpacing(Self.sectionSpacing, after: noteContainer)
@@ -393,6 +412,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
     }
 
     private func syncFromStore() {
+        if let item = previewModePopup.itemArray.first(where: {
+            $0.representedObject as? String == store.previewInteractionMode.rawValue
+        }) { previewModePopup.select(item) }
         if let item = languagePopup.itemArray.first(where: {
             $0.representedObject as? String == store.displayLanguage.rawValue
         }) {
@@ -426,6 +448,11 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         tabSelector.setAccessibilityLabel(l10n.text(.settingsWindow))
         languageLabel.stringValue = l10n.text(.settingsLanguage)
         languagePopup.setAccessibilityLabel(l10n.text(.settingsLanguage))
+        previewHeader.stringValue = l10n.text(.settingsPreview)
+        previewModeLabel.stringValue = l10n.text(.settingsPreviewInteraction)
+        previewModePopup.setAccessibilityLabel(l10n.text(.settingsPreviewInteraction))
+        previewModePopup.item(at: 0)?.title = l10n.text(.settingsPreviewWheelPan)
+        previewModePopup.item(at: 1)?.title = l10n.text(.settingsPreviewScroll)
         videoHeader.stringValue = l10n.text(.settingsVideo)
         fileOperationsHeader.stringValue = l10n.text(.settingsFileOperations)
         slideshowHeader.stringValue = l10n.text(.settingsSlideshow)
@@ -446,6 +473,13 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
             transitionPopup.item(at: index)?.title = l10n.text(key)
         }
         resizeToFitContent()
+    }
+
+    @objc private func selectPreviewMode(_ sender: NSPopUpButton) {
+        guard let raw = sender.selectedItem?.representedObject as? String,
+              let mode = PreviewInteractionMode(rawValue: raw) else { return }
+        store.previewInteractionMode = mode
+        NotificationCenter.default.post(name: .previewInteractionModeDidChange, object: nil)
     }
 
     @objc private func selectTransition(_ sender: NSPopUpButton) {

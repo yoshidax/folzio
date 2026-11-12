@@ -150,6 +150,10 @@ For a first look, see the [README](../README.md).
   - Not available while renaming, in full screen, during a slideshow, or inside a zip.
 - Double-click a media row or thumbnail to open it in its default app.
   Inside a zip, this does nothing.
+- Select one media file or zip file, then choose "Open With" from its context menu to open it in an associated app.
+  The same command is available from the File menu.
+  The default app appears first, followed by other apps, with each app's icon.
+  It is unavailable for multiple selections, folders, and items inside a zip.
 
 ### Zoom
 
@@ -158,9 +162,12 @@ For a first look, see the [README](../README.md).
     "Zoom In" (拡大), "Zoom to Fit" (表示領域に合わせる), and "Zoom Out" (縮小)
   - The View menu
   - ⌘+ / ⌘- / ⌘0 (⌘= also zooms in)
-- The fit size counts as 100%. The zoom ranges from 25% to 800% in 25% steps.
-- Images zoom around their center, and parts that overflow are not shown.
-  There is no scrolling, panning, pinching, or zoom-level readout.
+- The fit size counts as 100%, and zoom ranges from 25% to 800%. The buttons, menu, and shortcuts change the current zoom by 25 percentage points; wheel and pinch zoom vary continuously.
+- In Settings → Preview → Image Interaction, choose "Wheel zoom and drag" (the default) or "Scroll".
+  - With "Wheel zoom and drag", use the mouse wheel to zoom and drag to pan. On a trackpad, pinch to zoom and scroll with two fingers to pan. Scrollbars are hidden.
+  - With "Scroll", use the scrollbars or scroll gestures to move around an enlarged image.
+- Wheel and pinch zoom are centered on the pointer; the buttons, menu, and shortcuts zoom around the viewport center. Parts outside the viewport are hidden. There is no numerical zoom-level readout.
+- In either mode, use ⌥ plus an arrow key to move the image. Hold a horizontal and a vertical arrow together to move diagonally.
 - Available in the three-pane layout, the preview-only layout, and full screen.
 - Disabled for videos, an empty preview, images that cannot be displayed, and the file-list-only layout.
 - The zoom resets to 100% when you switch to another image (including slideshow auto-advance)
@@ -490,7 +497,9 @@ For a first look, see the [README](../README.md).
 | Move the selection in the hidden file list (preview only) | Arrow keys |
 | Quick Look the selected media | Space in the file list |
 | Open media in its default app | Double-click a media row or thumbnail |
+| Open one media or zip file in an associated app | Ctrl+F2 (or Fn+Ctrl+F2) → File → Open With |
 | Zoom the preview image in / out / fit to view | ⌘+ (⌘= also works) / ⌘− / ⌘0, View menu, toolbar |
+| Move around an enlarged preview image | ⌥ + arrow keys (combine horizontal and vertical arrows for diagonal movement) |
 
 ### Files
 

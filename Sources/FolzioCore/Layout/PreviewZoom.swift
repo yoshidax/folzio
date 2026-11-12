@@ -2,33 +2,50 @@ import CoreGraphics
 import Foundation
 
 /// Preview zoom level (FR-133). 100% is the fit-to-window display from FR-028, not actual size (A-62).
-/// Accepts only multiples of 25% between 25% and 800% and does not change at the limits.
+/// Accepts finite values between 25% and 800% and does not change at the limits.
 public struct PreviewZoom: Sendable, Equatable, Comparable {
     public static let step = 25
     public static let minimum = 25
     public static let maximum = 800
     public static let fit = PreviewZoom(percentage: 100)!
 
-    public let percentage: Int
+    public let percentage: Double
 
     public init?(percentage: Int) {
-        guard (Self.minimum...Self.maximum).contains(percentage),
-              percentage % Self.step == 0 else { return nil }
+        self.init(percentage: Double(percentage))
+    }
+
+    public init?(percentage: Double) {
+        guard percentage.isFinite, percentage >= Double(Self.minimum), percentage <= Double(Self.maximum) else { return nil }
         self.percentage = percentage
     }
 
     /// Scale applied to the fitted rectangle
     public var scale: CGFloat { CGFloat(percentage) / 100 }
 
-    public var canZoomIn: Bool { percentage < Self.maximum }
-    public var canZoomOut: Bool { percentage > Self.minimum }
+    public var canZoomIn: Bool { percentage < Double(Self.maximum) }
+    public var canZoomOut: Bool { percentage > Double(Self.minimum) }
 
     public func zoomedIn() -> PreviewZoom {
-        PreviewZoom(percentage: percentage + Self.step) ?? self
+        PreviewZoom(percentage: min(Double(Self.maximum), percentage + Double(Self.step)))!
     }
 
     public func zoomedOut() -> PreviewZoom {
-        PreviewZoom(percentage: percentage - Self.step) ?? self
+        PreviewZoom(percentage: max(Double(Self.minimum), percentage - Double(Self.step)))!
+    }
+
+    public func scaled(by factor: Double) -> PreviewZoom {
+        guard factor.isFinite, factor > 0 else { return self }
+        return PreviewZoom(percentage: min(Double(Self.maximum), max(Double(Self.minimum), percentage * factor)))!
+    }
+
+    public static func pinchFactor(for magnification: Double) -> Double {
+        guard magnification.isFinite else { return 1 }
+        return max(0.001, 1 + magnification)
+    }
+
+    public func pinched(by magnification: Double) -> PreviewZoom {
+        scaled(by: Self.pinchFactor(for: magnification))
     }
 
     public static func < (lhs: PreviewZoom, rhs: PreviewZoom) -> Bool {
@@ -73,6 +90,11 @@ public struct PreviewZoomTracker: Sendable, Equatable {
     @discardableResult
     public mutating func fit() -> Bool {
         update(.fit)
+    }
+
+    @discardableResult
+    public mutating func setLevel(_ newLevel: PreviewZoom) -> Bool {
+        update(newLevel)
     }
 
     private mutating func update(_ newLevel: PreviewZoom) -> Bool {

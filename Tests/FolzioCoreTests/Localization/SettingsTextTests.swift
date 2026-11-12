@@ -4,6 +4,19 @@ import Testing
 
 @Suite("Settings Window Text")
 struct SettingsTextTests {
+    @Test("Preview interaction options are available in both languages")
+    func previewInteractionOptions() {
+        let ja = LocalizationTestSupport.localizer("ja")
+        let en = LocalizationTestSupport.localizer("en")
+        #expect(ja.text(.settingsPreview) == "プレビュー")
+        #expect(ja.text(.settingsPreviewInteraction) == "画像の操作")
+        #expect(ja.text(.settingsPreviewWheelPan) == "ホイールズームとドラッグ")
+        #expect(ja.text(.settingsPreviewScroll) == "スクロール")
+        #expect(en.text(.settingsPreview) == "Preview")
+        #expect(en.text(.settingsPreviewInteraction) == "Image interaction")
+        #expect(en.text(.settingsPreviewWheelPan) == "Wheel zoom and drag")
+        #expect(en.text(.settingsPreviewScroll) == "Scroll")
+    }
     @Test("The confirmation checkbox and its note are separate sentences in both languages (FR-223)")
     func confirmationCheckboxAndNote() {
         let ja = LocalizationTestSupport.localizer("ja")

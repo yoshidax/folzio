@@ -111,6 +111,8 @@ public enum TextKey: String, CaseIterable, Sendable {
     case menuFile = "menu.file"
     case menuFileNewFolder = "menu.file.newFolder"
     case menuFileOpen = "menu.file.open"
+    case menuFileOpenWith = "menu.file.openWith"
+    case menuFileOpenWithDefaultSuffix = "menu.file.openWith.defaultSuffix"
     case menuFileShowContents = "menu.file.showContents"
     case menuFileEnclosingFolder = "menu.file.enclosingFolder"
     case menuFileRevealInFinder = "menu.file.revealInFinder"
@@ -193,6 +195,10 @@ public enum TextKey: String, CaseIterable, Sendable {
 
     case settingsWindow = "settings.window"
     case settingsLanguage = "settings.language"
+    case settingsPreview = "settings.preview"
+    case settingsPreviewInteraction = "settings.preview.interaction"
+    case settingsPreviewWheelPan = "settings.preview.wheelPan"
+    case settingsPreviewScroll = "settings.preview.scroll"
     case settingsLanguageEnglish = "settings.language.english"
     case settingsLanguageJapanese = "settings.language.japanese"
     case settingsVideo = "settings.video"
@@ -296,6 +302,8 @@ public enum TextKey: String, CaseIterable, Sendable {
     case dialogExtensionConfirm = "dialog.extension.confirm"
     case dialogRenameFailed = "dialog.rename.failed"
     case dialogOperationFailed = "dialog.operation.failed"
+    case dialogOpenWithFailed = "dialog.openWith.failed"
+    case dialogOpenWithDetail = "dialog.openWith.detail"
     case dialogOperationSummary = "dialog.operation.summary"
     case dialogOperationFailureLine = "dialog.operation.failureLine"
     case dialogOperationMore = "dialog.operation.more"
@@ -431,7 +439,7 @@ public enum TextKey: String, CaseIterable, Sendable {
             return [.text]
         case .contextCopySingle:
             return [.text]
-        case .dialogExtensionMessage, .dialogOperationFailureLine:
+        case .dialogExtensionMessage, .dialogOperationFailureLine, .dialogOpenWithDetail:
             return [.text, .text]
         case .searchBarResults, .searchBarSearching:
             return [.text, .text, .text]
@@ -724,10 +732,12 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Quit item in the application menu. Do not translate the app name"
         case .menuFile, .menuEdit, .menuView, .menuGo:
             return "Menu bar menu names"
-        case .menuFileNewFolder, .menuFileOpen, .menuFileShowContents, .menuFileEnclosingFolder,
+        case .menuFileNewFolder, .menuFileOpen, .menuFileOpenWith, .menuFileShowContents, .menuFileEnclosingFolder,
              .menuFileRevealInFinder, .menuFileAddToFavorites, .menuFileFind,
              .menuFileTrash, .menuFileRemoveFromFavorites:
             return "File menu items (the Trash and Remove from Favorites items swap depending on the state)"
+        case .menuFileOpenWithDefaultSuffix:
+            return "Suffix that identifies the default application in the Open With submenu"
         case .menuEditUndo, .menuEditRedo, .menuEditCut, .menuEditCopy, .menuEditPaste,
              .menuEditMovePaste, .menuEditCopyPathname, .menuEditDuplicate, .menuEditRename, .menuEditSelectAll:
             return "Edit menu items"
@@ -809,8 +819,12 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Display language label in the Settings window"
         case .settingsLanguageEnglish, .settingsLanguageJapanese:
             return "Display language options. Each language name is shown in that language"
-        case .settingsVideo, .settingsFileOperations, .settingsSlideshow:
+        case .settingsVideo, .settingsFileOperations, .settingsSlideshow, .settingsPreview:
             return "Section headings in the Settings window"
+        case .settingsPreviewInteraction:
+            return "Image interaction mode label in the Settings window"
+        case .settingsPreviewWheelPan, .settingsPreviewScroll:
+            return "Image interaction mode options"
         case .settingsAutoplay, .settingsLoop, .settingsConfirm, .settingsRepeat:
             return "Checkboxes in the Settings window"
         case .settingsConfirmNote:
@@ -895,6 +909,10 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Title shown when renaming fails"
         case .dialogOperationFailed:
             return "Title shown when a file operation fails"
+        case .dialogOpenWithFailed:
+            return "Title shown when the selected application cannot open a file"
+        case .dialogOpenWithDetail:
+            return "Open With failure details. The values are the application name and the OS error message"
         case .dialogOperationSummary:
             return "Counts of successful and failed file operations. The values are formatted counts"
         case .dialogOperationFailureLine:

@@ -4,6 +4,21 @@ import Testing
 
 @Suite("SettingsStore")
 struct SettingsStoreTests {
+    @Test("Preview mode defaults safely and preserves the selected value")
+    func previewInteractionMode() {
+        withDefaults { defaults in
+            let store = SettingsStore(defaults: defaults)
+            #expect(store.previewInteractionMode == .wheelZoomPan)
+            for invalid in ["unknown", "", 42, true] as [Any] {
+                defaults.set(invalid, forKey: "preview.interactionMode")
+                #expect(store.previewInteractionMode == .wheelZoomPan)
+            }
+            store.previewInteractionMode = .scroll
+            #expect(SettingsStore(defaults: defaults).previewInteractionMode == .scroll)
+            store.previewInteractionMode = .wheelZoomPan
+            #expect(SettingsStore(defaults: defaults).previewInteractionMode == .wheelZoomPan)
+        }
+    }
     @Test("The display language defaults to English when unset or invalid")
     func displayLanguageDefaultsToEnglish() {
         withDefaults { defaults in
