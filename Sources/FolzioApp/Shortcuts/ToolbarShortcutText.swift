@@ -26,6 +26,8 @@ enum ToolbarShortcutText {
         case .toolbarThumbnails: return [.thumbnails]
         case .toolbarList: return [.list]
         case .toolbarThumbnailSize: return [.largerThumbnails, .smallerThumbnails]
+        case .toolbarNameFilterHelp: return [.filterByName]
+        case .toolbarNameFilterFindHelp: return [.find]
         default: return []
         }
     }

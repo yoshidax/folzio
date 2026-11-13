@@ -145,6 +145,9 @@
 /* Empty state when the search returns no results */
 "empty.noMatches" = "No matching items";
 
+/* Empty state when the toolbar name filter leaves no items. %1$@ is the text the user typed */
+"empty.nameFilterNoMatches" = "No items match “%1$@”";
+
 /* Empty state when the folder cannot be read */
 "empty.accessDenied" = "Can’t access this folder";
 
@@ -210,6 +213,9 @@
 
 /* File menu item (ends with … because it opens a dialog) */
 "menu.file.find" = "Find…";
+
+/* File menu item that moves the focus to the toolbar name filter field */
+"menu.file.filterByName" = "Filter by Name";
 
 /* File and Edit menu item. Changes to menu.file.removeFromFavorites when a favorite is selected in the tree */
 "menu.file.trash" = "Move to Trash";
@@ -363,6 +369,18 @@
 
 /* Toolbar group name. Also shown in the customization palette and the text display mode */
 "toolbar.thumbnailSizeLabel" = "Thumbnail Size";
+
+/* Toolbar group name. Also shown in the customization palette and the text display mode */
+"toolbar.nameFilterLabel" = "Filter";
+
+/* Placeholder and accessibility label of the toolbar name filter field */
+"toolbar.nameFilterPlaceholder" = "Filter by Name";
+
+/* Tooltip of the toolbar name filter field. Includes the shortcut */
+"toolbar.nameFilterHelp" = "Filter by Name (%1$@)";
+
+/* Tooltip and accessibility label of the magnifying glass in the toolbar name filter field. Includes the shortcut */
+"toolbar.nameFilterFindHelp" = "Find… (%1$@)";
 
 /* Toolbar button tooltip and accessibility text. Includes the shortcut */
 "toolbar.goBackHelp" = "Back (%1$@)";
@@ -555,6 +573,12 @@
 
 /* Default name of a folder created with New Folder, before the user renames it. Use Finder's wording */
 "folder.defaultName" = "untitled folder";
+
+/* Heading at the top of the search sheet */
+"search.heading" = "Search Including Subfolders";
+
+/* Note below the search sheet heading. Also the accessibility help of the keyword field */
+"search.description" = "Finds files and folders whose names match, in the folder you search in and all of its subfolders.";
 
 /* Search sheet keyword label, placeholder, and accessibility text */
 "search.keyword" = "Keyword";
@@ -913,6 +937,12 @@
 
 /* Availability note below a shortcut reference action */
 "shortcuts.condition.find" = "Unavailable while renaming, in full screen, or in preview-only view.";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.filterByName" = "Filter the displayed list by name";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.filterByName" = "Unavailable while renaming, in full screen, or in preview-only view.";
 
 /* Action description in the shortcut reference */
 "shortcuts.entry.searchSubmit" = "Search or cancel in the search sheet";

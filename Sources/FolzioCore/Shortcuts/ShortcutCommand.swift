@@ -30,6 +30,7 @@ public enum ShortcutCommandID: String, CaseIterable, Sendable {
     case trash
     // Search, Images, Video and Slideshow, App
     case find
+    case filterByName
     case zoomIn
     case zoomOut
     case zoomToFit
@@ -92,7 +93,9 @@ public enum ShortcutCommands {
         ShortcutCommand(id: .duplicate, defaultCombination: key("d", [.command]), section: .files),
         ShortcutCommand(id: .newFolder, defaultCombination: key("n", [.shift, .command]), section: .files),
         ShortcutCommand(id: .trash, defaultCombination: key("delete", [.command]), section: .files),
-        ShortcutCommand(id: .find, defaultCombination: key("f", [.command]), section: .search),
+        ShortcutCommand(id: .find, defaultCombination: key("f", [.option, .command]), section: .search),
+        // Moves the keyboard focus to the toolbar name filter field (FR-391).
+        ShortcutCommand(id: .filterByName, defaultCombination: key("f", [.command]), section: .search),
         ShortcutCommand(
             id: .zoomIn, defaultCombination: key("+", [.command]), section: .images,
             alternates: [key("=", [.command])]

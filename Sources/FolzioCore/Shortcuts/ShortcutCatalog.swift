@@ -46,6 +46,7 @@ public enum ShortcutID: String, CaseIterable, Sendable {
     case newFolder
     case trash
     case find
+    case filterByName
     case searchSubmit
     case endSearch
     case imageZoom
@@ -145,7 +146,8 @@ public enum ShortcutCatalog {
         ShortcutEntry(id: .duplicate, keys: "⌘D", section: .files, parts: [.command(.duplicate)]),
         ShortcutEntry(id: .newFolder, keys: "⇧⌘N", section: .files, parts: [.command(.newFolder)]),
         ShortcutEntry(id: .trash, keys: "⌘Delete", section: .files, parts: [.command(.trash)]),
-        ShortcutEntry(id: .find, keys: "⌘F", section: .search, parts: [.command(.find)]),
+        ShortcutEntry(id: .find, keys: "⌥⌘F", section: .search, parts: [.command(.find)]),
+        ShortcutEntry(id: .filterByName, keys: "⌘F", section: .search, parts: [.command(.filterByName)]),
         ShortcutEntry(id: .searchSubmit, keys: "Return / Esc", section: .search),
         ShortcutEntry(id: .endSearch, keys: "Esc / ⌘[", section: .search, parts: [.text("Esc / "), .command(.back)]),
         ShortcutEntry(id: .imageZoom, keys: "⌘+ / ⌘= / ⌘-", section: .images, parts: [

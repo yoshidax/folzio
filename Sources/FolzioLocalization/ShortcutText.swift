@@ -47,6 +47,7 @@ public enum ShortcutText {
         case .newFolder: return .shortcutNewFolder
         case .trash: return .shortcutTrash
         case .find: return .shortcutFind
+        case .filterByName: return .shortcutFilterByName
         case .searchSubmit: return .shortcutSearchSubmit
         case .endSearch: return .shortcutEndSearch
         case .imageZoom: return .shortcutImageZoom
@@ -99,6 +100,7 @@ public enum ShortcutText {
         case .newFolder: return .shortcutNewFolderCondition
         case .trash: return .shortcutTrashCondition
         case .find: return .shortcutFindCondition
+        case .filterByName: return .shortcutFilterByNameCondition
         case .searchSubmit: return .shortcutSearchSubmitCondition
         case .endSearch: return .shortcutEndSearchCondition
         case .imageZoom: return .shortcutImageZoomCondition
@@ -147,6 +149,7 @@ public enum ShortcutText {
         case .newFolder: return .menuFileNewFolder
         case .trash: return .menuFileTrash
         case .find: return .menuFileFind
+        case .filterByName: return .menuFileFilterByName
         case .zoomIn: return .menuViewZoomIn
         case .zoomOut: return .menuViewZoomOut
         case .zoomToFit: return .menuViewZoomToFit

@@ -87,6 +87,14 @@ final class MainSplitViewController: NSSplitViewController {
     var onSlideshowAvailabilityChange: (() -> Void)?
     /// Notifies when zoom in, zoom out, or Zoom to Fit availability changes (FR-134, FR-136).
     var onZoomAvailabilityChange: (() -> Void)?
+    /// Notifies when full screen starts or ends, which changes whether search and the toolbar name filter field are
+    /// available (FR-388). Pane layout and editing changes are reported through the other callbacks.
+    var onSearchAvailabilityChange: (() -> Void)?
+    /// Set by the toolbar. Whether the toolbar can take the keyboard focus into its name filter field: the field is in
+    /// the toolbar, and the toolbar does not show text only (FR-391).
+    var canFocusNameFilter: (() -> Bool)?
+    /// Set by the toolbar. Shows the toolbar if it is hidden, then focuses the name filter field (FR-391).
+    var focusNameFilter: (() -> Void)?
 
     /// Slideshow driver. Created lazily because it sets this controller as its delegate.
     private(set) lazy var slideshowCoordinator: SlideshowCoordinator = {
@@ -806,12 +814,14 @@ final class MainSplitViewController: NSSplitViewController {
         focusBeforeFullScreen = focusedPane()
         isFullScreenPresentation = true
         applyPanePresentation()
+        onSearchAvailabilityChange?()
     }
 
     private func leaveFullScreenPresentation() {
         guard isFullScreenPresentation else { return }
         isFullScreenPresentation = false
         applyPanePresentation()
+        onSearchAvailabilityChange?()
 
         let presentation = PanePresentation(layout: paneLayout, isFullScreen: false)
         if let pane = focusBeforeFullScreen, presentation.isVisible(pane) {
@@ -1119,12 +1129,45 @@ final class MainSplitViewController: NSSplitViewController {
         treeViewController.addSelectedFolderToFavorites()
     }
 
-    /// ⌘F. Opens the search modal. The default root is the displayed folder (the pre-search folder while showing
+    /// ⌥⌘F. Opens the search modal. The default root is the displayed folder (the pre-search folder while showing
     /// search results; FR-080, FR-081).
     @objc func showSearch(_ sender: Any?) {
         guard paneCommands.canSearch else { return }
+        presentSearchPanel(keyword: lastSearchKeyword)
+    }
+
+    /// Opens the search modal from the toolbar name filter field's magnifying glass, or with ⌥⌘F while that field has
+    /// the keyboard focus. Text in the field becomes the keyword; an empty field opens the modal as ⌥⌘F does. Only the
+    /// keyword differs from ⌥⌘F (FR-390).
+    func showSearch(carrying fieldText: String) {
+        guard paneCommands.canSearch else { return }
+        presentSearchPanel(
+            keyword: ToolbarSearchInput.modalKeyword(fieldText: fieldText, previousKeyword: lastSearchKeyword)
+        )
+    }
+
+    /// Moves the keyboard focus to the file list, keeping the name filter (FR-389). When the filter hides every
+    /// search result, the list itself is hidden behind the message, so the focus stays in the field.
+    func focusFileListForNameFilter() {
+        let list = fileListViewController.primaryFocusView
+        guard paneCommands.canFocus(.fileList), !list.isHiddenOrHasHiddenAncestor else { return }
+        focusPane(list)
+    }
+
+    /// ⌘F and "File > Filter by Name". Moves the keyboard focus to the toolbar name filter field, showing the toolbar
+    /// first when it is hidden (FR-391).
+    @objc func filterByName(_ sender: Any?) {
+        guard canFilterByName else { return }
+        focusNameFilter?()
+    }
+
+    private var canFilterByName: Bool {
+        paneCommands.canSearch && (canFocusNameFilter?() ?? false)
+    }
+
+    private func presentSearchPanel(keyword: String?) {
         let panel = SearchPanelController(
-            keyword: lastSearchKeyword,
+            keyword: keyword,
             rootPath: model.listing.folder.path
         ) { [weak self] pattern, root in
             guard let self else { return }
@@ -1230,6 +1273,8 @@ extension MainSplitViewController: NSMenuItemValidation {
             return paneCommands.canGoToFavorites
         case #selector(showSearch(_:)):
             return paneCommands.canSearch
+        case #selector(filterByName(_:)):
+            return canFilterByName
         case #selector(goBack(_:)):
             return paneCommands.canNavigateHistory && historyNavigator.canGoBack
         case #selector(goForward(_:)):

@@ -94,11 +94,13 @@ For a first look, see the [README](../README.md).
 ### Toolbar
 
 - The toolbar has the view-mode buttons and the thumbnail-size slider.
+- At the right end, a search field filters the displayed list by name ([Filtering the displayed list](#filtering-the-displayed-list)).
 - It is hidden by default. Toggle it with ⇧⌘T. Its state is restored on the next launch.
 - To customize it, right-click the toolbar and choose "Customize Toolbar…".
   - Drag button groups to rearrange them. A group such as Back/Forward or Thumbnails/List moves as one unit.
   - You can also remove and re-add groups, add spaces, and change the display mode.
   - The order and display mode are restored on the next launch.
+  - If you rearranged the toolbar in an earlier version, the search field is not added automatically. Drag "Filter" from the customization sheet to add it.
 
 ### Pane Layouts
 
@@ -336,10 +338,29 @@ For a first look, see the [README](../README.md).
 
 ## Searching by Name
 
+The toolbar search field filters the list you are viewing by name. To look through subfolders as well, use the search modal (⌥⌘F).
+
+### Filtering the Displayed List
+
+- Type in the toolbar search field to filter the list by name as you type. You do not need to press Return.
+  - Names are matched with the same rules as the search ([Matching Rules](#matching-rules)). Files, folders, zip files, and folders inside a zip are filtered.
+  - The `..` row at the top always stays.
+  - It works in any list: a regular folder, inside a zip, and search results. Filtering search results does not change the count in the search bar.
+  - When nothing matches, the list says so.
+- Click the clear button, or press Esc in the field, to clear the text and the filter.
+- Press Return in the field to move to the file list and keep the filter.
+- Press ⌘F, or choose File → "Filter by Name" (名前で絞り込む), to move to the field. The toolbar is shown if it is hidden.
+- Moving to another place (selecting in the tree, opening a folder, Back/Forward, starting or ending a search, and so on) clears the filter and the field.
+  - Changing the sort order, the view mode, or the media type filter keeps it.
+- Hiding the toolbar, removing the field from the toolbar, or showing the toolbar as text only also clears the filter.
+- Items that the filter hides are removed from the selection.
+- Click the magnifying glass in the field to open the search modal with the typed text as the keyword. ⌥⌘F in the field does the same.
+
 ### Starting a Search
 
-- Press ⌘F or choose File → "Find…" (検索…).
+- Press ⌥⌘F or choose File → "Find…" (検索…).
 - A modal asks for a "Keyword" and "Search In".
+  - The modal is titled "Search Including Subfolders". It looks through the start folder and all of its subfolders.
   - The start folder defaults to the absolute path of the folder shown in the file list.
   - The keyword is pre-filled, fully selected, with the previous search from the same session.
   - The start folder must be a path starting with `/` or `~`.
@@ -518,7 +539,8 @@ For a first look, see the [README](../README.md).
 
 | Action | Default shortcut |
 |--------|----------|
-| Search by name (file and folder names) | ⌘F, File menu → "Find…" |
+| Search by name (file and folder names) | ⌥⌘F, File menu → "Find…" |
+| Filter the displayed list by name (move to the search field) | ⌘F, File menu → "Filter by Name" |
 | Choose the search start folder | "Choose…" in the search sheet (Tab to move to it, Space to open it) |
 | Open a folder row in the search results | Double-click, ⌘↓, "Show Contents" in the context menu |
 | Close the search results | Select a folder in the tree, Esc in the file list |

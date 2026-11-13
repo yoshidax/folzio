@@ -13,6 +13,9 @@ final class MainToolbarController: NSObject {
     private static let zipVisibilityIdentifier = NSToolbarItem.Identifier("zipVisibility")
     private static let viewModeIdentifier = NSToolbarItem.Identifier("viewMode")
     private static let thumbnailSizeIdentifier = NSToolbarItem.Identifier("thumbnailSize")
+    private static let nameFilterIdentifier = NSToolbarItem.Identifier(ToolbarLayout.nameFilterIdentifier)
+    /// Width of the name filter field (A-231).
+    private static let nameFilterFieldWidth: CGFloat = 180
 
     let toolbar = NSToolbar(identifier: "MainToolbar")
 
@@ -24,6 +27,7 @@ final class MainToolbarController: NSObject {
     private var configurationObservations: [NSKeyValueObservation] = []
     private var assignmentObserver: ShortcutAssignmentObserver?
     private var terminationObserver: NSObjectProtocol?
+    private var displayModeObservation: NSKeyValueObservation?
 
     // The toolbar does not keep references to its controls. The customization palette and the removal and re-adding of
     // items create new items, so a stored reference would point at a control that is no longer displayed (TAK-23, R-2).
@@ -61,6 +65,10 @@ final class MainToolbarController: NSObject {
             self?.apply(showsZipFiles: shows)
         }
 
+        fileList.onNameFilterChange = { [weak self] text in
+            self?.apply(nameFilterText: text)
+        }
+
         visibilityObservation = toolbar.observe(\.isVisible, options: [.new]) { [weak self] _, change in
             // Read the new value from the change, because `NSToolbar.isVisible` is main actor-isolated on older SDKs.
             guard let isVisible = change.newValue else { return }
@@ -77,6 +85,20 @@ final class MainToolbarController: NSObject {
         }
         panes.onZoomAvailabilityChange = { [weak self] in
             self?.applyZoomAvailability()
+        }
+        panes.onSearchAvailabilityChange = { [weak self] in
+            self?.applyNameFilterAvailability()
+        }
+        panes.canFocusNameFilter = { [weak self] in
+            self?.canFocusNameFilter ?? false
+        }
+        panes.focusNameFilter = { [weak self] in
+            self?.focusNameFilter()
+        }
+        // Text only shows no field, so the name filter would act without anything showing it (FR-393, A-226).
+        displayModeObservation = toolbar.observe(\.displayMode, options: [.new]) { [weak self] _, change in
+            guard change.newValue == .labelOnly else { return }
+            MainActor.assumeIsolated { self?.clearNameFilter() }
         }
         observeEditingAvailability()
         observeSheetAvailability()
@@ -168,6 +190,9 @@ final class MainToolbarController: NSObject {
             item.menuFormRepresentation?.title = item.label
             applySlideshowState(to: item)
         }
+        for item in items(for: Self.nameFilterIdentifier) {
+            applyNameFilterTexts(to: item)
+        }
         for item in items(for: Self.thumbnailSizeIdentifier) {
             item.label = l10n.text(.toolbarThumbnailSizeLabel)
             item.paletteLabel = item.label
@@ -203,6 +228,12 @@ final class MainToolbarController: NSObject {
                 thumbnailSize: fileList.currentThumbnailSize,
                 to: item
             )
+        case Self.nameFilterIdentifier:
+            // A field that enters the toolbar shows the current filter (EC-254: empty after being added again).
+            if let field = item.view as? NSSearchField, field.stringValue != fileList.currentNameFilterText {
+                field.stringValue = fileList.currentNameFilterText
+            }
+            applyNameFilterAvailability(to: item)
         default:
             break
         }
@@ -213,6 +244,7 @@ final class MainToolbarController: NSObject {
             applySlideshowState(to: item)
         }
         applyHistoryAvailability()
+        applyNameFilterAvailability()
         toolbar.validateVisibleItems()
     }
 
@@ -332,6 +364,7 @@ final class MainToolbarController: NSObject {
             applyPaneLayout(paneLayout, to: item)
         }
         applyHistoryAvailability()
+        applyNameFilterAvailability()
     }
 
     private func applyPaneLayout(_ paneLayout: PaneLayout, to item: NSToolbarItem) {
@@ -396,6 +429,11 @@ final class MainToolbarController: NSObject {
 
     private func toolbarVisibilityChanged(_ isVisible: Bool) {
         fileList.isToolbarShown = isVisible
+        // Hiding the toolbar hides the field, so the filter would act without anything showing it (FR-393, A-226).
+        // Full screen hides the toolbar through the presentation options and does not change `isVisible` (EC-258).
+        if !isVisible {
+            clearNameFilter()
+        }
 
         var viewSettings = settings.viewSettings
         guard viewSettings.showsToolbar != isVisible else { return }
@@ -450,6 +488,128 @@ final class MainToolbarController: NSObject {
 
     @objc private func thumbnailSizeChanged(_ sender: NSSlider) {
         fileList.applyThumbnailSize(sender.doubleValue)
+    }
+
+    // MARK: - Name filter field (TAK-86)
+
+    /// Shows the filter's text in every field in the toolbar, such as after a new location cleared it (FR-384). A field
+    /// that already shows the text is left alone, so typing keeps the caret and trailing spaces. A field whose input
+    /// method is still composing text is also left alone, because this runs one turn after the change and the
+    /// composition may have started in between (FR-389).
+    private func apply(nameFilterText text: String) {
+        for item in items(for: Self.nameFilterIdentifier) {
+            guard let field = item.view as? NSSearchField, field.stringValue != text else { continue }
+            if let editor = field.currentEditor() as? NSTextView, editor.hasMarkedText() { continue }
+            field.stringValue = text
+        }
+    }
+
+    /// Enables the field only when the search sheet can open (FR-388). Disabling keeps the text and the filter.
+    private func applyNameFilterAvailability() {
+        for item in items(for: Self.nameFilterIdentifier) {
+            applyNameFilterAvailability(to: item)
+        }
+    }
+
+    private func applyNameFilterAvailability(to item: NSToolbarItem) {
+        let enabled = panes.paneCommands.canSearch
+        item.isEnabled = enabled
+        (item.view as? NSSearchField)?.isEnabled = enabled
+    }
+
+    private func clearNameFilter() {
+        guard !fileList.currentNameFilterText.isEmpty else { return }
+        fileList.applyNameFilter("")
+    }
+
+    /// Whether ⌘F can move the focus into the field: the field is in the toolbar, the toolbar does not show text only,
+    /// and the field is not moved into the overflow menu of a narrow window (FR-391). A hidden toolbar is shown first,
+    /// so it does not count here. An overflowed field has no window, and focusing it would silently do nothing.
+    private var canFocusNameFilter: Bool {
+        guard toolbar.displayMode != .labelOnly,
+              let field = items(for: Self.nameFilterIdentifier).first?.view else { return false }
+        return !toolbar.isVisible || field.window != nil
+    }
+
+    /// Shows the toolbar if needed, then puts the keyboard focus in the field and selects its text (FR-391).
+    private func focusNameFilter() {
+        guard canFocusNameFilter else { return }
+        guard !toolbar.isVisible else {
+            focusNameFilterField()
+            return
+        }
+        toolbar.isVisible = true
+        // The field gets its window once the shown toolbar is laid out.
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.focusNameFilterField() }
+        }
+    }
+
+    private func focusNameFilterField() {
+        guard let field = items(for: Self.nameFilterIdentifier).first?.view as? NSSearchField,
+              let window = field.window,
+              window.makeFirstResponder(field) else { return }
+        field.currentEditor()?.selectAll(nil)
+    }
+
+    /// The magnifying glass, ⌥⌘F while the field has the focus, and the overflow and text-only item. Opens the search
+    /// sheet with the field's text as the keyword (FR-390, FR-392).
+    @objc func showSearch(_ sender: Any?) {
+        panes.showSearch(carrying: fileList.currentNameFilterText)
+    }
+
+    /// The field's action, sent as the user types and when the clear button or Esc empties it (FR-381, FR-383).
+    @objc private func nameFilterFieldChanged(_ sender: NSSearchField) {
+        updateNameFilter(from: sender)
+    }
+
+    /// Filters by the field's text. Text that is still being composed by an input method does not filter until it is
+    /// committed (FR-389). Fields in the customization palette are ignored (EC-256).
+    private func updateNameFilter(from field: NSSearchField) {
+        guard items(for: Self.nameFilterIdentifier).contains(where: { $0.view === field }) else { return }
+        if let editor = field.currentEditor() as? NSTextView, editor.hasMarkedText() { return }
+        fileList.applyNameFilter(field.stringValue)
+    }
+
+    private func makeNameFilterItem(identifier: NSToolbarItem.Identifier) -> NSToolbarItem {
+        let field = ToolbarSearchField(width: Self.nameFilterFieldWidth)
+        field.delegate = self
+        field.target = self
+        field.action = #selector(nameFilterFieldChanged(_:))
+        field.sendsSearchStringImmediately = true
+        field.sendsWholeSearchString = false
+        // The field forwards a click on the magnifying glass and ⌥⌘F to `showSearch(_:)` (FR-390).
+        field.findCommandTarget = self
+
+        let item = NSToolbarItem(itemIdentifier: identifier)
+        item.view = field
+        let menuItem = NSMenuItem(title: "", action: #selector(showSearch(_:)), keyEquivalent: "")
+        menuItem.target = self
+        item.menuFormRepresentation = menuItem
+        applyNameFilterTexts(to: item)
+        return item
+    }
+
+    /// Applies the label, placeholder, tooltips, and accessibility texts in the current language and keys (FR-392,
+    /// EC-255). Does not change the typed text.
+    private func applyNameFilterTexts(to item: NSToolbarItem) {
+        let label = l10n.text(.toolbarNameFilterLabel)
+        let placeholder = l10n.text(.toolbarNameFilterPlaceholder)
+        let fieldHelp = ToolbarShortcutText.text(.toolbarNameFilterHelp)
+        let findHelp = ToolbarShortcutText.text(.toolbarNameFilterFindHelp)
+        item.label = label
+        item.paletteLabel = label
+        item.menuFormRepresentation?.title = label
+        guard let field = item.view as? ToolbarSearchField else { return }
+        field.placeholderString = placeholder
+        field.setAccessibilityLabel(placeholder)
+        field.setAccessibilityHelp(fieldHelp)
+        field.fieldToolTip = fieldHelp
+        field.searchButtonToolTip = findHelp
+        field.setFindAccessibilityAction(name: findHelp)
+        if let button = (field.cell as? NSSearchFieldCell)?.searchButtonCell {
+            button.setAccessibilityLabel(findHelp)
+        }
     }
 
     /// Creates a thumbnail size slider. Every toolbar item gets its own slider, because a view can have only one
@@ -519,12 +679,15 @@ final class MainToolbarController: NSObject {
 }
 
 extension MainToolbarController: NSToolbarDelegate {
+    /// The default order comes from `ToolbarLayout`, which also decides whether a configuration equals the default and
+    /// need not be saved (FR-233, FR-235).
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.historyIdentifier, Self.paneLayoutIdentifier, Self.slideshowIdentifier, Self.previewZoomIdentifier, Self.mediaTypeFilterIdentifier, Self.zipVisibilityIdentifier, Self.viewModeIdentifier, Self.thumbnailSizeIdentifier, .flexibleSpace]
+        ToolbarLayout.defaultOrder.map { NSToolbarItem.Identifier($0) }
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.historyIdentifier, Self.paneLayoutIdentifier, Self.slideshowIdentifier, Self.previewZoomIdentifier, Self.mediaTypeFilterIdentifier, Self.zipVisibilityIdentifier, Self.viewModeIdentifier, Self.thumbnailSizeIdentifier, .space, .flexibleSpace]
+        (ToolbarLayout.setIdentifiers + [ToolbarLayout.spaceIdentifier, ToolbarLayout.flexibleSpaceIdentifier])
+            .map { NSToolbarItem.Identifier($0) }
     }
 
     /// Applies the current state to an item as it enters the toolbar. At this point the item is not yet in
@@ -532,6 +695,19 @@ extension MainToolbarController: NSToolbarDelegate {
     func toolbarWillAddItem(_ notification: Notification) {
         guard let item = notification.userInfo?["item"] as? NSToolbarItem else { return }
         applyState(to: item)
+    }
+
+    /// Removing the name filter field clears the filter, because nothing would show it (FR-393, A-226). The check
+    /// waits one turn, so moving the field within the toolbar, which may remove and add it, keeps the filter.
+    func toolbarDidRemoveItem(_ notification: Notification) {
+        guard let item = notification.userInfo?["item"] as? NSToolbarItem,
+              item.itemIdentifier == Self.nameFilterIdentifier else { return }
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.items(for: Self.nameFilterIdentifier).isEmpty else { return }
+                self.clearNameFilter()
+            }
+        }
     }
 
     func toolbar(
@@ -696,6 +872,8 @@ extension MainToolbarController: NSToolbarDelegate {
             item.view = makeSizeSlider()
             item.autovalidates = false
             return item
+        case Self.nameFilterIdentifier:
+            return makeNameFilterItem(identifier: itemIdentifier)
         default:
             return nil
         }
@@ -723,15 +901,40 @@ extension MainToolbarController: NSToolbarItemValidation {
             let enabled = !fileList.isEditingText
             (item.view as? NSSegmentedControl)?.isEnabled = enabled
             return enabled
+        case Self.nameFilterIdentifier:
+            applyNameFilterAvailability(to: item)
+            return panes.paneCommands.canSearch
         default:
             return true
         }
     }
 }
 
+extension MainToolbarController: NSSearchFieldDelegate {
+    func controlTextDidChange(_ obj: Notification) {
+        guard let field = obj.object as? ToolbarSearchField else { return }
+        updateNameFilter(from: field)
+    }
+
+    /// Return keeps the filter and moves the focus to the file list (FR-389). While an input method composes text,
+    /// Return commits the text and does not reach here. Esc is left to the field, which clears the text (FR-383).
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard let field = control as? ToolbarSearchField,
+              commandSelector == #selector(NSResponder.insertNewline(_:)) else { return false }
+        updateNameFilter(from: field)
+        panes.focusFileListForNameFilter()
+        return true
+    }
+}
+
 extension MainToolbarController: NSMenuItemValidation {
-    /// The overflow menu item of the Slideshow toggle button (EC-240).
+    /// The overflow menu item of the Slideshow toggle button (EC-240), and the items that open the search sheet from the
+    /// name filter field (FR-388).
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(showSearch(_:)) {
+            // ⌥⌘F while the name filter field has the focus, and the field's overflow and text-only item (FR-388).
+            return panes.paneCommands.canSearch
+        }
         guard menuItem.action == #selector(slideshowToggled(_:)) else { return true }
         let state = panes.slideshowToggleState
         menuItem.state = state.isOn ? .on : .off

@@ -89,6 +89,7 @@ public enum TextKey: String, CaseIterable, Sendable {
     case emptySearching = "empty.searching"
     case emptyNoMedia = "empty.noMedia"
     case emptyNoMatches = "empty.noMatches"
+    case emptyNameFilterNoMatches = "empty.nameFilterNoMatches"
     case emptyAccessDenied = "empty.accessDenied"
 
     case previewScrollHorizontal = "preview.scroll.horizontal"
@@ -118,6 +119,7 @@ public enum TextKey: String, CaseIterable, Sendable {
     case menuFileRevealInFinder = "menu.file.revealInFinder"
     case menuFileAddToFavorites = "menu.file.addToFavorites"
     case menuFileFind = "menu.file.find"
+    case menuFileFilterByName = "menu.file.filterByName"
     case menuFileTrash = "menu.file.trash"
     case menuFileRemoveFromFavorites = "menu.file.removeFromFavorites"
     case menuEdit = "menu.edit"
@@ -176,6 +178,10 @@ public enum TextKey: String, CaseIterable, Sendable {
     case toolbarSlideshowLabel = "toolbar.slideshowLabel"
     case toolbarZipFilesLabel = "toolbar.zipFilesLabel"
     case toolbarThumbnailSizeLabel = "toolbar.thumbnailSizeLabel"
+    case toolbarNameFilterLabel = "toolbar.nameFilterLabel"
+    case toolbarNameFilterPlaceholder = "toolbar.nameFilterPlaceholder"
+    case toolbarNameFilterHelp = "toolbar.nameFilterHelp"
+    case toolbarNameFilterFindHelp = "toolbar.nameFilterFindHelp"
     case toolbarGoBackHelp = "toolbar.goBackHelp"
     case toolbarGoForwardHelp = "toolbar.goForwardHelp"
     case toolbarShowFileListOnlyHelp = "toolbar.showFileListOnlyHelp"
@@ -257,6 +263,8 @@ public enum TextKey: String, CaseIterable, Sendable {
 
     // MARK: - Search
 
+    case searchHeading = "search.heading"
+    case searchDescription = "search.description"
     case searchKeyword = "search.keyword"
     case searchRoot = "search.root"
     case searchChoose = "search.choose"
@@ -389,6 +397,8 @@ public enum TextKey: String, CaseIterable, Sendable {
     case shortcutTrashCondition = "shortcuts.condition.trash"
     case shortcutFind = "shortcuts.entry.find"
     case shortcutFindCondition = "shortcuts.condition.find"
+    case shortcutFilterByName = "shortcuts.entry.filterByName"
+    case shortcutFilterByNameCondition = "shortcuts.condition.filterByName"
     case shortcutSearchSubmit = "shortcuts.entry.searchSubmit"
     case shortcutSearchSubmitCondition = "shortcuts.condition.searchSubmit"
     case shortcutEndSearch = "shortcuts.entry.endSearch"
@@ -434,6 +444,7 @@ public enum TextKey: String, CaseIterable, Sendable {
              .toolbarGoBackHelp, .toolbarGoForwardHelp, .toolbarShowFileListOnlyHelp, .toolbarShowPreviewOnlyHelp, .toolbarShowImagesOnlyHelp,
              .toolbarShowVideosOnlyHelp, .toolbarZipFilesHelp, .toolbarStartSlideshowHelp, .toolbarZoomInHelp, .toolbarZoomToFitHelp,
              .toolbarZoomOutHelp, .toolbarThumbnails, .toolbarList, .toolbarThumbnailSize,
+             .toolbarNameFilterHelp, .toolbarNameFilterFindHelp, .emptyNameFilterNoMatches,
              .settingsShortcutsRecordFor, .settingsShortcutsResetFor, .settingsShortcutsErrorConflict, .settingsShortcutsErrorDefaultConflict,
              .settingsShortcutsClearFor:
             return [.text]
@@ -601,6 +612,10 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Action description in the shortcut reference"
         case .shortcutFindCondition:
             return "Availability note below a shortcut reference action"
+        case .shortcutFilterByName:
+            return "Action description in the shortcut reference"
+        case .shortcutFilterByNameCondition:
+            return "Availability note below a shortcut reference action"
         case .shortcutSearchSubmit:
             return "Action description in the shortcut reference"
         case .shortcutSearchSubmitCondition:
@@ -702,6 +717,8 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Empty state for a folder with no supported media files"
         case .emptyNoMatches:
             return "Empty state when the search returns no results"
+        case .emptyNameFilterNoMatches:
+            return "Empty state when the toolbar name filter leaves no items. The value is the text the user typed (do not translate)"
         case .emptyAccessDenied:
             return "Empty state when the folder cannot be read"
         case .previewScrollHorizontal, .previewScrollVertical:
@@ -733,7 +750,7 @@ public enum TextKey: String, CaseIterable, Sendable {
         case .menuFile, .menuEdit, .menuView, .menuGo:
             return "Menu bar menu names"
         case .menuFileNewFolder, .menuFileOpen, .menuFileOpenWith, .menuFileShowContents, .menuFileEnclosingFolder,
-             .menuFileRevealInFinder, .menuFileAddToFavorites, .menuFileFind,
+             .menuFileRevealInFinder, .menuFileAddToFavorites, .menuFileFind, .menuFileFilterByName,
              .menuFileTrash, .menuFileRemoveFromFavorites:
             return "File menu items (the Trash and Remove from Favorites items swap depending on the state)"
         case .menuFileOpenWithDefaultSuffix:
@@ -761,7 +778,7 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Paste in the directory tree's context menu"
         case .toolbarHistory, .toolbarPanes, .toolbarZoomGroup, .toolbarMediaType,
              .toolbarViewMode, .toolbarSize, .toolbarZipFilesLabel,
-             .toolbarThumbnailSizeLabel:
+             .toolbarThumbnailSizeLabel, .toolbarNameFilterLabel:
             return "Toolbar group names. They are also shown in the customization palette and in the text display mode"
         case .toolbarSlideshowLabel:
             return "Name of the Slideshow toolbar item. Also shown in the customization palette and in the text display mode. "
@@ -770,6 +787,12 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Thumbnail size in the toolbar and size bar. The value is the shortcut text"
         case .toolbarStartSlideshowHelp:
             return "Slideshow tooltip. The value is the shortcut text"
+        case .toolbarNameFilterPlaceholder:
+            return "Placeholder and accessibility label of the toolbar search field that filters the file list by name"
+        case .toolbarNameFilterHelp:
+            return "Tooltip of the toolbar search field that filters the file list by name. The value is the shortcut text"
+        case .toolbarNameFilterFindHelp:
+            return "Tooltip and accessibility label of the magnifying glass in the toolbar search field, which opens the search sheet. The value is the shortcut text"
         case .toolbarStopSlideshowHelp:
             return "Tooltip and accessibility help of the Slideshow toggle button while a slideshow is running. Esc is a fixed key"
         case .toolbarZoomInHelp, .toolbarZoomToFitHelp, .toolbarZoomOutHelp:
@@ -840,6 +863,10 @@ public enum TextKey: String, CaseIterable, Sendable {
         case .settingsTransitionNone, .settingsTransitionCrossfade,
              .settingsTransitionSlide, .settingsTransitionZoom:
             return "Transition options"
+        case .searchHeading:
+            return "Heading at the top of the search sheet. It names the search that looks through subfolders"
+        case .searchDescription:
+            return "Note below the search sheet heading. It is also the accessibility help of the keyword field"
         case .listColumnName, .listColumnCreationDate, .listColumnKind, .listColumnSize,
              .listColumnModificationDate, .listColumnLocation:
             return "List view column headings. Also used in the sort menu"

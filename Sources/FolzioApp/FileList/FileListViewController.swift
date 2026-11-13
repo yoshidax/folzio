@@ -50,6 +50,9 @@ final class FileListViewController: NSViewController {
     var onViewStateChange: ((DisplayMode, Double) -> Void)?
     var onMediaTypeFilterChange: ((MediaTypeFilter) -> Void)?
     var onShowsZipFilesChange: ((Bool) -> Void)?
+    /// Called when the name filter changes, including when a new location clears it, so the toolbar search field can
+    /// show the same text (FR-384).
+    var onNameFilterChange: ((String) -> Void)?
     /// Notifies history when the user changes the presentation (FR-107 item 3). Not called from the restore
     /// setter (R70).
     var onViewChange: ((HistoryRecordKind) -> Void)?
@@ -75,6 +78,11 @@ final class FileListViewController: NSViewController {
 
     var currentShowsZipFiles: Bool {
         model.showsZipFiles
+    }
+
+    /// The text of the name filter, as typed in the toolbar search field (FR-381).
+    var currentNameFilterText: String {
+        model.nameFilter.text
     }
 
     init(
@@ -312,8 +320,18 @@ final class FileListViewController: NSViewController {
         model.selectionItemCommands
     }
 
+    /// Whether a name is being edited in the tree or the file list. Disables search, the media type filter, and
+    /// other commands while renaming.
     var isEditingText: Bool {
-        view.window?.firstResponder is NSTextView
+        Self.isRenaming(firstResponder: view.window?.firstResponder)
+    }
+
+    /// Whether the first responder is the field editor of a rename. Typing in the toolbar name filter field also
+    /// makes a field editor the first responder, but it is not renaming: treating it as renaming disabled the field
+    /// while the user typed in it, which moved the focus to the file list (FR-388, TAK-86).
+    static func isRenaming(firstResponder: NSResponder?) -> Bool {
+        guard let editor = firstResponder as? NSTextView else { return false }
+        return !(editor.delegate is ToolbarSearchField)
     }
 
     override func loadView() {
@@ -408,6 +426,7 @@ final class FileListViewController: NSViewController {
         observeModel()
         observeMediaTypeFilter()
         observeShowsZipFiles()
+        observeNameFilter()
     }
 
     @objc private func displayLanguageDidChange() {
@@ -588,6 +607,20 @@ final class FileListViewController: NSViewController {
         }
     }
 
+    /// Follows the name filter, which the toolbar search field sets and a new location clears (FR-381, FR-384).
+    private func observeNameFilter() {
+        withObservationTracking {
+            _ = model.nameFilter
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.onNameFilterChange?(self.model.nameFilter.text)
+                self.refresh()
+                self.observeNameFilter()
+            }
+        }
+    }
+
     private func observeShowsZipFiles() {
         withObservationTracking {
             _ = model.showsZipFiles
@@ -634,6 +667,10 @@ final class FileListViewController: NSViewController {
         case .empty:
             // Distinguish this from "No supported media files" in FR-060.
             message = isSearch ? l10n.text(.emptyNoMatches) : l10n.text(.emptyNoMedia)
+        case .noMatches where model.nameFilterHidesAllRows:
+            // Distinguished from the media type filter's message and the search's "no matching items" (FR-386).
+            let typed = model.nameFilter.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            message = l10n.text(.emptyNameFilterNoMatches, .text(typed))
         case .noMatches:
             switch model.mediaTypeFilter.emptyState {
             case .imagesOnly: message = l10n.text(.emptyFilterImages)
@@ -843,6 +880,12 @@ final class FileListViewController: NSViewController {
         model.setMediaTypeFilter(filter)
         onViewChange?(.viewChange)
         Task { @MainActor in self.restoreScrollOriginIfNeeded() }
+    }
+
+    /// Filters the displayed list by the text typed in the toolbar search field (FR-381). The filter is not part of
+    /// the history, so this does not report a view change (EC-254).
+    func applyNameFilter(_ text: String) {
+        model.setNameFilter(text)
     }
 
     func applyShowsZipFiles(_ shows: Bool) {

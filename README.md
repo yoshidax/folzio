@@ -26,7 +26,7 @@ macOS 15 or later · Apple silicon only · English and Japanese · Works locally
 - **Look inside zip archives.** Browse folders and preview images and videos inside zip files.
   Archive contents are read-only; videos play directly from the archive without temporary extraction.
 - **Find files across folders.** Search file and folder names (and zip file names while zip files are shown),
-  then preview and organize matching items without leaving the results.
+  then preview and organize matching items without leaving the results. Type in the toolbar search field to filter the list you are viewing by name.
 - **Focus on your media.** Zoom images, switch to preview-only or full-screen viewing (double-click the preview),
   skip videos back or forward 5 seconds, or start a slideshow with adjustable timing and transitions.
 - **Make it your own.** Rearrange the toolbar, reassign menu shortcuts, and choose which columns the list view shows.
@@ -73,7 +73,8 @@ The keys below are the defaults. You can change the shortcut of a menu command i
 | Open the shortcut reference | ⌘/ |
 | Thumbnail view / list view | ⌘1 / ⌘2 |
 | Show / hide the toolbar | ⇧⌘T |
-| Search file and folder names | ⌘F |
+| Search file and folder names | ⌥⌘F |
+| Filter the displayed list by name | ⌘F |
 | Open a folder / go up one level | ⌘↓ / ⌘↑ |
 | Create a new folder | ⇧⌘N |
 | Cancel receiving images or videos | ⌘. |

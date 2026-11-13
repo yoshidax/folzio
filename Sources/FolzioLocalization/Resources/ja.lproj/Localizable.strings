@@ -145,6 +145,9 @@
 /* Empty state when the search returns no results */
 "empty.noMatches" = "該当する項目はありません";
 
+/* Empty state when the toolbar name filter leaves no items. %1$@ is the text the user typed */
+"empty.nameFilterNoMatches" = "“%1$@”に一致する項目はありません";
+
 /* Empty state when the folder cannot be read */
 "empty.accessDenied" = "アクセスできません";
 
@@ -210,6 +213,9 @@
 
 /* File menu item (ends with … because it opens a dialog) */
 "menu.file.find" = "検索…";
+
+/* File menu item that moves the focus to the toolbar name filter field */
+"menu.file.filterByName" = "名前で絞り込む";
 
 /* File and Edit menu item. Changes to menu.file.removeFromFavorites when a favorite is selected in the tree */
 "menu.file.trash" = "ゴミ箱に入れる";
@@ -363,6 +369,18 @@
 
 /* Toolbar group name. Also shown in the customization palette and the text display mode */
 "toolbar.thumbnailSizeLabel" = "サムネイルサイズ";
+
+/* Toolbar group name. Also shown in the customization palette and the text display mode */
+"toolbar.nameFilterLabel" = "絞り込み";
+
+/* Placeholder and accessibility label of the toolbar name filter field */
+"toolbar.nameFilterPlaceholder" = "名前で絞り込み";
+
+/* Tooltip of the toolbar name filter field. Includes the shortcut */
+"toolbar.nameFilterHelp" = "名前で絞り込む（%1$@）";
+
+/* Tooltip and accessibility label of the magnifying glass in the toolbar name filter field. Includes the shortcut */
+"toolbar.nameFilterFindHelp" = "検索…（%1$@）";
 
 /* Toolbar button tooltip and accessibility text. Includes the shortcut */
 "toolbar.goBackHelp" = "戻る（%1$@）";
@@ -555,6 +573,12 @@
 
 /* Default name of a folder created with New Folder, before the user renames it. Use Finder's wording */
 "folder.defaultName" = "名称未設定フォルダ";
+
+/* Heading at the top of the search sheet */
+"search.heading" = "サブフォルダを含めて検索";
+
+/* Note below the search sheet heading. Also the accessibility help of the keyword field */
+"search.description" = "検索起点ディレクトリとその下のすべてのサブフォルダから、名前が一致するファイルとフォルダを探します。";
 
 /* Search sheet keyword label, placeholder, and accessibility text */
 "search.keyword" = "検索キーワード";
@@ -913,6 +937,12 @@
 
 /* Availability note below a shortcut reference action */
 "shortcuts.condition.find" = "名前の編集中・全画面中・プレビューのみ表示中は使えません。";
+
+/* Action description in the shortcut reference */
+"shortcuts.entry.filterByName" = "表示中の一覧を名前で絞り込む";
+
+/* Availability note below a shortcut reference action */
+"shortcuts.condition.filterByName" = "名前の編集中・全画面中・プレビューのみ表示中は使えません。";
 
 /* Action description in the shortcut reference */
 "shortcuts.entry.searchSubmit" = "検索シートで検索・取り消しを行う";

@@ -3,10 +3,10 @@ import Testing
 
 @Suite("Shortcut Command Consistency")
 struct ShortcutCommandConsistencyTests {
-    @Test("There are 32 commands, one definition per ID")
+    @Test("There are 33 commands, one definition per ID")
     func commandsCoverEveryID() {
-        #expect(ShortcutCommandID.allCases.count == 32)
-        #expect(ShortcutCommands.all.count == 32)
+        #expect(ShortcutCommandID.allCases.count == 33)
+        #expect(ShortcutCommands.all.count == 33)
         #expect(Set(ShortcutCommands.all.map(\.id)) == Set(ShortcutCommandID.allCases))
     }
 
@@ -40,11 +40,12 @@ struct ShortcutCommandConsistencyTests {
             .largerThumbnails: "⌃⌘.", .smallerThumbnails: "⌃⌘,", .imagesOnly: "⇧⌘I", .videosOnly: "⇧⌘M",
             .zipVisibility: "⌃⌘Z", .showContents: "⌘↓", .enclosingFolder: "⌘↑", .back: "⌘[", .forward: "⌘]",
             .goToFavorites: "⇧⌘F", .addToFavorites: "⌃⌘T", .open: "⌘O", .movePaste: "⌥⌘V",
-            .copyPathname: "⌥⌘C", .duplicate: "⌘D", .newFolder: "⇧⌘N", .trash: "⌘Delete", .find: "⌘F",
+            .copyPathname: "⌥⌘C", .duplicate: "⌘D", .newFolder: "⇧⌘N", .trash: "⌘Delete", .find: "⌥⌘F",
+            .filterByName: "⌘F",
             .zoomIn: "⌘+", .zoomOut: "⌘-", .zoomToFit: "⌘0", .fullScreen: "⌃⌘F", .startSlideshow: "⇧⌘S",
             .shortcuts: "⌘/",
         ]
-        #expect(expected.count == 32)
+        #expect(expected.count == 33)
         for command in ShortcutCommands.all {
             #expect(command.defaultCombination.displayText == expected[command.id], "\(command.id)")
         }

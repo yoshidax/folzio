@@ -16,6 +16,8 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
     private let initialRootPath: String
     private let onSearch: (SearchPattern, URL) -> Void
 
+    private let headingLabel = NSTextField(labelWithString: "")
+    private let descriptionLabel = NSTextField(wrappingLabelWithString: "")
     private let keywordField = NSSearchField()
     private let rootField = NSTextField()
     private let keywordLabel = NSTextField(labelWithString: "")
@@ -50,12 +52,28 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
     override func loadView() {
         let container = NSView()
 
+        // The heading and its description tell this search from the toolbar name filter: it looks through the
+        // subfolders of the search root (FR-394). They match the Settings window's section headings and notes
+        // (FR-223): a bold heading, and a smaller, secondary note that is not interactive.
+        headingLabel.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        headingLabel.stringValue = l10n.text(.searchHeading)
+        descriptionLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        descriptionLabel.textColor = .secondaryLabelColor
+        descriptionLabel.isSelectable = false
+        descriptionLabel.isEditable = false
+        descriptionLabel.refusesFirstResponder = true
+        descriptionLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // The keyword field reads the note as its help, so the note is not read again as a separate item.
+        descriptionLabel.setAccessibilityElement(false)
+        descriptionLabel.stringValue = l10n.text(.searchDescription)
+
         keywordLabel.stringValue = l10n.text(.searchKeyword)
         rootLabel.stringValue = l10n.text(.searchRoot)
 
         keywordField.placeholderString = l10n.text(.searchKeyword)
         keywordField.delegate = self
         keywordField.setAccessibilityLabel(l10n.text(.searchKeyword))
+        keywordField.setAccessibilityHelp(l10n.text(.searchDescription))
         keywordField.stringValue = initialKeyword ?? ""
 
         configureRootField()
@@ -100,11 +118,13 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
         buttons.spacing = 12
 
         let stack = NSStackView(views: [
-            keywordLabel, keywordField, rootLabel, rootRow, reasonLabel, buttons,
+            headingLabel, descriptionLabel, keywordLabel, keywordField, rootLabel, rootRow, reasonLabel, buttons,
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
+        stack.setCustomSpacing(4, after: headingLabel)
+        stack.setCustomSpacing(14, after: descriptionLabel)
         stack.setCustomSpacing(14, after: keywordField)
         stack.setCustomSpacing(14, after: reasonLabel)
         stack.setCustomSpacing(14, after: rootRow)
@@ -121,6 +141,7 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
             keywordField.widthAnchor.constraint(equalTo: stack.widthAnchor),
             rootRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             reasonLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            descriptionLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             buttons.trailingAnchor.constraint(equalTo: stack.trailingAnchor),
         ])
 
@@ -138,6 +159,9 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
     }
 
     @objc private func displayLanguageDidChange() {
+        headingLabel.stringValue = l10n.text(.searchHeading)
+        descriptionLabel.stringValue = l10n.text(.searchDescription)
+        keywordField.setAccessibilityHelp(l10n.text(.searchDescription))
         keywordLabel.stringValue = l10n.text(.searchKeyword)
         rootLabel.stringValue = l10n.text(.searchRoot)
         keywordField.placeholderString = l10n.text(.searchKeyword)

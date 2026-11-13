@@ -66,6 +66,13 @@ public final class BrowserModel {
     /// URLs whose content version changed at the latest `contentChangeGeneration`.
     public private(set) var changedContentURLs: Set<URL> = []
     public private(set) var mediaTypeFilter = MediaTypeFilter()
+    /// Filter by name from the toolbar search field (FR-381). Applied after the media type filter and zip
+    /// visibility. Not saved and not recorded in history; cleared when the displayed location changes (FR-384).
+    public private(set) var nameFilter = NameFilter()
+    /// Whether the name filter hides every row that the other filters left, so the list shows the name filter's
+    /// empty state instead of the media type filter's (FR-386). Meaningful only while `listing.state` is
+    /// `.noMatches`.
+    public private(set) var nameFilterHidesAllRows = false
     /// Whether zip file rows appear in the list (FR-095). The source of truth for persistence is
     /// `SettingsStore`'s `view.showsZipFiles`.
     public private(set) var showsZipFiles: Bool
@@ -427,6 +434,10 @@ public final class BrowserModel {
         } else {
             selection = SelectionState(selected: selected, focused: selection.focused)
         }
+        // A new name that no longer matches the name filter hides the row, so it leaves the selection (EC-250).
+        if nameFilter.isFiltering {
+            restrictSelectionToVisibleRows()
+        }
     }
 
     /// After renaming a folder, rebases the displayed listing, selection, search results, position inside a zip, and
@@ -561,6 +572,11 @@ public final class BrowserModel {
 
         if let additionalSearchRoot, let pattern = searchPattern {
             startSearchStream(in: additionalSearchRoot, matching: pattern, matchesRoot: additionalMatchesRoot)
+        }
+        // A folder row whose new name no longer matches the name filter is hidden, so it leaves the selection (EC-250).
+        // A listing that is still loading has no rows yet, so it would drop the whole selection.
+        if nameFilter.isFiltering, listing.state != .loading {
+            restrictSelectionToVisibleRows()
         }
     }
 
@@ -744,13 +760,43 @@ public final class BrowserModel {
     public func setMediaTypeFilter(_ filter: MediaTypeFilter) {
         guard filter != mediaTypeFilter else { return }
         mediaTypeFilter = filter
+        rebuildListingForFilterChange()
+    }
+
+    /// Filters the displayed list by name as the user types in the toolbar search field (FR-381).
+    ///
+    /// Works on every listing: a regular folder, a zip, and search results (FR-382). Rows hidden by the filter leave
+    /// the selection with the same rules as the media type filter (FR-385). Text that differs only in leading or
+    /// trailing whitespace keeps the same rows, so only the stored text changes.
+    public func setNameFilter(_ text: String) {
+        let filter = NameFilter(text: text)
+        guard filter != nameFilter else { return }
+        let changesRows = filter.pattern != nameFilter.pattern
+        nameFilter = filter
+        guard changesRows else { return }
+        rebuildListingForFilterChange()
+    }
+
+    /// Rebuilds the rows after a filter changes, without reading the disk, and keeps only the selected rows that
+    /// remain visible (FR-059, FR-385).
+    private func rebuildListingForFilterChange() {
         switch listing.state {
         case .loaded, .empty, .noMatches:
             rebuildListing()
         case .loading, .denied, .failed:
             break
         }
+        restrictSelectionToVisibleRows()
+    }
 
+    /// Keeps only the selected rows that are still displayed, with the same focus rules as the media type filter
+    /// (FR-059, FR-385).
+    private func restrictSelectionToVisibleRows() {
+        // Nothing to restrict without a selection. Skipping it avoids hashing every row's URL on each keystroke.
+        guard !selection.selected.isEmpty || selection.focused != nil else {
+            schedulePrefetch(around: nil)
+            return
+        }
         let restricted = selection.restricted(toVisible: listing.files.map(\.url))
         if restricted.focused == selection.focused {
             selection = restricted
@@ -1002,14 +1048,25 @@ public final class BrowserModel {
         let filtered = isShowingSearchResults
             ? mediaFiltered
             : ZipFileVisibility(showsZipFiles: showsZipFiles).apply(to: mediaFiltered)
+        // The name filter comes last and matches every row kind by name. `..` is added after it, so it stays (FR-381).
+        let named = nameFilter.apply(to: filtered)
         if let location = listing.archive {
-            listing.files = [Self.parentRow(for: location)] + filtered
+            listing.files = [Self.parentRow(for: location)] + named
         } else {
-            listing.files = folderParentRows() + filtered
+            listing.files = folderParentRows() + named
         }
 
         if listing.search?.phase == .searching, allFiles.isEmpty {
+            nameFilterHidesAllRows = false
             listing.state = .loading
+            return
+        }
+
+        // Rows exist but the name filter hides them all: show the name filter's message (FR-386). Otherwise decide
+        // the state from the rows before the name filter, so the media type filter's message is unchanged.
+        nameFilterHidesAllRows = nameFilter.isFiltering && !filtered.isEmpty && named.isEmpty
+        if nameFilterHidesAllRows {
+            listing.state = .noMatches
             return
         }
 
@@ -1117,6 +1174,9 @@ public final class BrowserModel {
         selection = SelectionState()
         preview = .empty
         allFiles = []
+        // The name filter belongs to the displayed list, so a new location starts without it (FR-384).
+        nameFilter = NameFilter()
+        nameFilterHidesAllRows = false
     }
 
     /// Opens a zip and builds the root listing. Uses `.loading` while opening.

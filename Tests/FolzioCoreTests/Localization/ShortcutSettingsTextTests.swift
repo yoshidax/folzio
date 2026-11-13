@@ -17,7 +17,12 @@ struct ShortcutSettingsTextTests {
         .toolbarGoBackHelp, .toolbarGoForwardHelp, .toolbarShowFileListOnlyHelp, .toolbarShowPreviewOnlyHelp,
         .toolbarShowImagesOnlyHelp, .toolbarShowVideosOnlyHelp, .toolbarZipFilesHelp, .toolbarStartSlideshowHelp,
         .toolbarZoomInHelp, .toolbarZoomToFitHelp, .toolbarZoomOutHelp, .toolbarThumbnails, .toolbarList,
-        .toolbarThumbnailSize,
+        .toolbarThumbnailSize, .toolbarNameFilterHelp, .toolbarNameFilterFindHelp,
+    ]
+    /// Texts of the toolbar name filter field that take no argument (TAK-86).
+    private let nameFilterPlainKeys: [TextKey] = [
+        .toolbarNameFilterLabel, .toolbarNameFilterPlaceholder, .menuFileFilterByName,
+        .shortcutFilterByName, .shortcutFilterByNameCondition,
     ]
     /// Toolbar texts that name a fixed key, so they take no argument (TAK-89).
     private let toolbarPlainKeys: [TextKey] = [.toolbarStopSlideshowHelp]
@@ -65,6 +70,26 @@ struct ShortcutSettingsTextTests {
                 #expect(key.arguments.isEmpty, "\(key.rawValue)")
                 #expect(localizer.text(key) != key.rawValue)
             }
+        }
+    }
+
+    @Test("Name filter texts are translated, and the plain ones take no argument (TAK-86)")
+    func nameFilterTextsAreTranslated() throws {
+        for language in LocalizationTestSupport.languages {
+            let strings = try LocalizationTestSupport.strings(language)
+            let localizer = LocalizationTestSupport.localizer(language)
+            for key in nameFilterPlainKeys {
+                let translation = try #require(strings[key.rawValue], "\(language): \(key.rawValue)")
+                #expect(!translation.isEmpty)
+                #expect(!translation.contains("%"), "\(language): \(key.rawValue)")
+                #expect(key.arguments.isEmpty, "\(key.rawValue)")
+                #expect(localizer.text(key) != key.rawValue)
+            }
+            #expect(TextKey.emptyNameFilterNoMatches.arguments == [.text])
+            let message = localizer.text(.emptyNameFilterNoMatches, .text("<TYPED>"))
+            #expect(message.contains("<TYPED>"), "\(language)")
+            #expect(message != TextKey.emptyNameFilterNoMatches.rawValue)
+            #expect(localizer.text(.toolbarNameFilterHelp, .text("⌥⌘F")).contains("⌥⌘F"))
         }
     }
 

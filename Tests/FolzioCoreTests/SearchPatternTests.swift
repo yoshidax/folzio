@@ -42,6 +42,39 @@ struct SearchPatternTests {
         #expect(!(try pattern("ネコ").matches(fileName: "ねこ.jpg")))
     }
 
+    @Test("The ASCII fast path normalizes exactly like NFC with case folding")
+    func asciiFastPathMatchesFoundation() {
+        let samples = [
+            "IMG_0001.JPG", "Cat02.png", "a-b_c d.mov", "[1] ~x@y#z$%^&*()=+.gif", "", "MiXeD123",
+            "が.png", "Café.jpg", "CAFÉ", "ｃａｔ.jpg", "ß.png", "İstanbul.png",
+        ]
+        for sample in samples {
+            let expected = sample.precomposedStringWithCanonicalMapping
+                .folding(options: [.caseInsensitive], locale: nil)
+            #expect(SearchPattern.normalize(sample) == expected, "\(sample)")
+        }
+    }
+
+    @Test("The ASCII byte search gives the same result as normalizing and calling contains")
+    func asciiSearchMatchesReference() throws {
+        let names = [
+            "IMG_0001.JPG", "img_0001.jpg", "Cat02.png", "my_cat.mov", "CATALOG", "c", "", "a-b_c d.mov",
+            "[1] cat.gif", "dog.png", "Café.jpg", "が.png", "ｃａｔ.jpg", "CAT.PNG", "concatenate.zip",
+        ]
+        let keywords = ["cat", "CAT", "c", "img_0", "PNG", ".jpg", "a-b_c d", "[1]", "catalogue", "é", "が", "ｃａｔ"]
+        for keyword in keywords {
+            let pattern = try #require(SearchPattern(keyword: keyword))
+            let normalizedKeyword = SearchPattern.normalize(keyword)
+            for name in names {
+                let expected = SearchPattern.normalize(name).contains(normalizedKeyword)
+                #expect(pattern.matches(fileName: name) == expected, "keyword=\(keyword) name=\(name)")
+            }
+        }
+        #expect(SearchPattern.asciiContains("Café.jpg", Array("caf".utf8)) == nil)
+        #expect(SearchPattern.asciiContains("ABC", Array("abcd".utf8)) == false)
+        #expect(SearchPattern.asciiContains("xABCx", Array("abc".utf8)) == true)
+    }
+
     @Test("With wildcards, matches the whole file name")
     func wildcardMatch() throws {
         let png = try pattern("*.png")
