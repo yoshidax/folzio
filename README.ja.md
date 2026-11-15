@@ -9,6 +9,8 @@ Folzio は、フォルダ移動・サムネイル一覧・プレビューをひ�
 
 macOS 15 以降 · Apple silicon 専用 · 英語・日本語対応 · ネットワーク通信なしでローカルで動作 · [MIT License](LICENSE)
 
+Web サイト: [yoshidax.github.io/folzio](https://yoshidax.github.io/folzio/ja/)
+
 ![フォルダツリー、画像のサムネイル、写真のプレビューを表示した Folzio](docs/images/screenshot.jpg)
 
 ## 主な機能

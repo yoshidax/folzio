@@ -163,6 +163,8 @@ scripts/
   check-no-archive-writes.sh # アーカイブコードで書き込み API を使わないことの確認
   check-no-network.sh      # ネットワーク API 非依存の確認
   check-readme-sync.sh     # README.md と README.ja.md の同期の確認
+  check-site.py            # Web サイトのページの公開前の確認
+site/                      # GitHub Pages で公開する Web サイト（英語。日本語は ja/）
 ```
 
 設計上のルール:

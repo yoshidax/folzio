@@ -3,6 +3,7 @@ import Darwin
 import Foundation
 import ImageIO
 
+// site/app-icon.svg reproduces this drawing for the website. Update it when the design changes.
 private let designSize: CGFloat = 1024
 private let renderSizes = [16, 32, 64, 128, 256, 512, 1024]
 

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Folzio — Mac の画像・動画ブラウザ</title>
+  <meta name="description" content="Folzio は、フォルダにある画像や動画をそのまま見て整理できる、無料・オープンソースの macOS アプリです。">
+  <link rel="canonical" href="https://yoshidax.github.io/folzio/ja/">
+  <link rel="alternate" hreflang="en" href="https://yoshidax.github.io/folzio/">
+  <link rel="alternate" hreflang="ja" href="https://yoshidax.github.io/folzio/ja/">
+  <link rel="alternate" hreflang="x-default" href="https://yoshidax.github.io/folzio/">
+  <link rel="icon" href="../app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../style.css">
+  <script src="../analytics.js"></script>
+  <script src="../reveal.js"></script>
+  <script src="../lightbox.js"></script>
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="../app-icon.svg" alt="" width="28" height="28">Folzio</a>
+      <nav class="nav-links" aria-label="セクション">
+        <a href="#features">機能</a>
+        <a href="#privacy">プライバシー</a>
+        <a href="#download">ダウンロード</a>
+        <a href="https://github.com/yoshidax/folzio/blob/main/docs/usage.ja.md">ガイド</a>
+      </nav>
+      <a class="lang-switch" href="../" hreflang="en" lang="en">English</a>
+      <a class="pill" href="#download">入手</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <div class="app-id">
+          <img class="app-icon" src="../app-icon.svg" width="128" height="128" alt="Folzio のアプリアイコン">
+          <p class="app-name">Folzio</p>
+        </div>
+        <h1>フォルダが、そのままライブラリに。</h1>
+        <p class="lead">画像も動画も、フォルダにあるまま見て、そのまま整理。取り込みはいりません。</p>
+        <div class="cta">
+          <a class="btn" href="https://github.com/yoshidax/folzio/releases/latest">ダウンロード</a>
+          <a class="more" href="https://github.com/yoshidax/folzio">GitHub で見る ›</a>
+        </div>
+        <p class="meta">macOS 15 以降 · Apple silicon · 日本語・英語 · 無料のオープンソース（MIT）</p>
+        <img class="shot" src="../media/en/s1-hero.webp" width="2048" height="1280"
+             alt="3 ペインの Folzio。フォルダツリー、写真のサムネイル、大きな写真のプレビュー">
+      </div>
+    </section>
+
+    <section class="band" id="features">
+      <div class="wrap center">
+        <h2>3つのペイン。ひとつのウインドウ。</h2>
+        <div class="panes">
+          <div>
+            <h3>たどる。</h3>
+            <p>フォルダツリーで移動。よく開くフォルダはお気に入りに。</p>
+          </div>
+          <div>
+            <h3>見渡す。</h3>
+            <p>サムネイルと一覧を <kbd>⌘1</kbd> と <kbd>⌘2</kbd> で切り替え。</p>
+          </div>
+          <div>
+            <h3>確かめる。</h3>
+            <p>選んだものを、すぐに大きく。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band alt">
+      <div class="wrap center">
+        <h2>画像も動画も、同じ一覧で。</h2>
+        <p class="lead">写真、アニメーション GIF、WebP、動画をひとつの一覧に。動画は自動再生もループも。Space でクイックルック。</p>
+        <img class="shot" src="../media/en/s2-media.webp" width="2048" height="1280" loading="lazy"
+             alt="写真と動画が混在するフォルダ。プレビューで動画を再生中">
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap center">
+        <h2>zip は、展開せずにそのまま。</h2>
+        <p class="lead">zip の中のフォルダをたどって、画像も動画もプレビュー。日本語のファイル名は文字コードを自動で判別して表示し、動画は zip から直接再生します。</p>
+      </div>
+    </section>
+
+    <section class="band alt">
+      <div class="wrap center">
+        <h2>Web の画像を、ドラッグで保存。</h2>
+        <p class="lead">Safari や Chrome の画像を、フォルダへドラッグ。「画像をコピー」の後に <kbd>⌘V</kbd> でも。写真アプリの写真や動画も受け取れます。</p>
+        <img class="shot" src="../media/en/s4-web.webp" width="2048" height="1279" loading="lazy"
+             alt="Web ブラウザと Folzio を並べ、画像をフォルダへドラッグしている">
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap center">
+        <h2>見ながら、整える。</h2>
+        <p class="lead">コピーも、移動も、名前の変更も。使い慣れたショートカットとドラッグ＆ドロップで。Finder との受け渡しも、複数のフォルダのまとめての移動も。</p>
+        <img class="shot" src="../media/en/s5-organize.webp" width="2048" height="1279" loading="lazy"
+             alt="複数のサムネイルをツリーのフォルダへドラッグしている">
+      </div>
+    </section>
+
+    <section class="band alt">
+      <div class="wrap center">
+        <h2>入力するそばから、見つかる。</h2>
+        <p class="lead"><kbd>⌥⌘F</kbd> でサブフォルダまで検索し、結果ごとに場所も表示。ツールバーに入力すれば、検索結果も含めて、どの一覧もその場で絞り込めます。</p>
+        <div class="shot-row">
+          <img class="shot" src="../media/en/s6-search.webp" width="2048" height="1280" loading="lazy"
+               alt="リスト表示の検索結果と「場所」の列">
+          <video class="shot" width="1280" height="800" autoplay muted loop playsinline preload="metadata"
+                 poster="../media/en/m1-search.jpg" aria-label="フォルダを起点に検索し、ツールバーの検索欄で結果を絞り込む操作">
+            <source src="../media/en/m1-search.mp4" type="video/mp4">
+          </video>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap center">
+        <h2>見ることに、集中する。</h2>
+        <p class="lead">ピンチで拡大。プレビューだけの表示も、フルスクリーンも。クロスフェード、スライド、ズームの切り替え効果でスライドショーを。</p>
+        <div class="shot-row">
+          <img class="shot" src="../media/en/s7-focus.webp" width="2048" height="1280" loading="lazy"
+               alt="写真を拡大して単独で表示">
+          <video class="shot" width="1280" height="800" autoplay muted loop playsinline preload="metadata"
+                 poster="../media/en/m2-slideshow.jpg" aria-label="切り替え効果つきで写真が移り変わるスライドショー">
+            <source src="../media/en/m2-slideshow.mp4" type="video/mp4">
+          </video>
+        </div>
+      </div>
+    </section>
+
+    <section class="band alt">
+      <div class="wrap center">
+        <h2>自分の使い方に、合わせる。</h2>
+        <p class="lead">メニューのショートカットを変更し、ツールバーを並べ替え、必要な列だけを表示。ショートカット一覧は別のウインドウで開いたままに。</p>
+        <div class="shot-row">
+          <img class="shot" src="../media/en/s8-1-reference.webp" width="2048" height="1279" loading="lazy"
+               alt="キーボードショートカットの一覧のウインドウ">
+          <img class="shot" src="../media/en/s8-2-settings.webp" width="2048" height="1280" loading="lazy"
+               alt="設定のキーボードショートカット">
+        </div>
+      </div>
+    </section>
+
+    <section class="band statement" id="privacy">
+      <div class="wrap center">
+        <h2>ファイルは、あなたの Mac に。</h2>
+        <p class="lead">Folzio のアプリは、ネットワーク通信をせずに Mac の中だけで動きます。アカウントも、アップロードもありません。</p>
+      </div>
+    </section>
+
+    <section class="band alt" id="download">
+      <div class="wrap center">
+        <img class="dl-icon" src="../app-icon.svg" width="80" height="80" alt="">
+        <h2>Folzio を、あなたの Mac に。</h2>
+        <p class="req">macOS 15 以降、Apple silicon 搭載の Mac が必要です。Intel 搭載の Mac には対応していません。</p>
+        <a class="dl-btn" href="https://github.com/yoshidax/folzio/releases/latest">最新版をダウンロード</a>
+        <ol class="steps">
+          <li><p>GitHub Releases から <code>Folzio-vX.Y.Z-macos-arm64.zip</code> を<strong>ダウンロード</strong>。</p></li>
+          <li><p><strong>展開</strong>して、Folzio をアプリケーションフォルダへ。</p></li>
+          <li><p><strong>開く</strong>。macOS にブロックされたら、システム設定 → プライバシーとセキュリティ で「このまま開く」を選びます。<a href="https://support.apple.com/ja-jp/102445">詳しく ›</a></p></li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="foot-links">
+        <a href="https://github.com/yoshidax/folzio/blob/main/docs/usage.ja.md">ユーザーガイド</a>
+        <a href="https://github.com/yoshidax/folzio/blob/main/docs/development.ja.md">ソースからビルド</a>
+        <a href="https://github.com/yoshidax/folzio">GitHub</a>
+        <a href="https://github.com/yoshidax/folzio/blob/main/LICENSE">MIT ライセンス</a>
+        <a href="privacy.html">このサイトのプライバシーポリシー</a>
+      </div>
+      <p>Folzio は作者が個人で開発・保守しているプロジェクトです。アプリは Developer ID による署名と Apple の公証を受けていません。</p>
+      <p>Apple、Mac、macOS、Apple silicon は、米国およびその他の国で登録された Apple Inc. の商標です。</p>
+      <p>© 2026 yoshidax</p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -163,6 +163,8 @@ scripts/
   check-no-archive-writes.sh # Checks that archive code does not use write APIs
   check-no-network.sh      # Checks that no network APIs are used
   check-readme-sync.sh     # Checks that README.md and README.ja.md are in sync
+  check-site.py            # Checks the website pages before publishing
+site/                      # Website published with GitHub Pages (English, ja/ for Japanese)
 ```
 
 Design rules:

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Port of Sources/make-icon/main.swift (CoreGraphics, y-up) to SVG. The group flips the y axis. -->
+  <defs>
+    <linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="512" y1="924" x2="512" y2="100">
+      <stop offset="0" stop-color="#364f8f"/>
+      <stop offset="1" stop-color="#0f172b"/>
+    </linearGradient>
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="512" cy="924" r="620">
+      <stop offset="0" stop-color="#8cb8ff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#8cb8ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sky" gradientUnits="userSpaceOnUse" x1="708.5" y1="810" x2="708.5" y2="214">
+      <stop offset="0" stop-color="#5eabe0"/>
+      <stop offset="1" stop-color="#1a4f78"/>
+    </linearGradient>
+    <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+    <clipPath id="ph"><rect x="607" y="214" width="203" height="596" rx="18"/></clipPath>
+  </defs>
+  <g transform="translate(0 1024) scale(1 -1)">
+    <g clip-path="url(#sq)">
+      <rect x="100" y="100" width="824" height="824" fill="url(#bg)"/>
+      <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
+    </g>
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="none" stroke="#fff" stroke-opacity="0.16" stroke-width="3"/>
+    <rect x="168" y="168" width="688" height="688" rx="64" fill="#fff" fill-opacity="0.08" stroke="#fff" stroke-opacity="0.18" stroke-width="4"/>
+
+    <rect x="194" y="194" width="158" height="636" rx="26" fill="#3361ad" fill-opacity="0.95" stroke="#fff" stroke-opacity="0.14" stroke-width="3"/>
+    <rect x="366" y="194" width="207" height="636" rx="26" fill="#172136" fill-opacity="0.95" stroke="#fff" stroke-opacity="0.12" stroke-width="3"/>
+    <rect x="587" y="194" width="243" height="636" rx="26" fill="#121c30" fill-opacity="0.95" stroke="#fff" stroke-opacity="0.12" stroke-width="3"/>
+
+    <!-- folder -->
+    <rect x="225.6" y="518.83" width="45.5" height="20.48" rx="5.46" fill="#f0f7ff" fill-opacity="0.96"/>
+    <rect x="225.6" y="477.87" width="94.8" height="49.14" rx="6.83" fill="#f0f7ff" fill-opacity="0.96"/>
+    <rect x="240.77" y="492.89" width="64.46" height="6" rx="3" fill="#3361ad" fill-opacity="0.55"/>
+
+    <!-- thumbnails -->
+    <rect x="390" y="218" width="72.5" height="287" rx="16" fill="#549ef2"/>
+    <rect x="400" y="228" width="52.5" height="267" rx="10" fill="#fff" fill-opacity="0.18"/>
+    <rect x="476.5" y="218" width="72.5" height="287" rx="16" fill="#4dcca3"/>
+    <rect x="486.5" y="228" width="52.5" height="267" rx="10" fill="#fff" fill-opacity="0.18"/>
+    <rect x="390" y="519" width="72.5" height="287" rx="16" fill="#f7ab3b"/>
+    <rect x="400" y="529" width="52.5" height="267" rx="10" fill="#fff" fill-opacity="0.18"/>
+    <rect x="476.5" y="519" width="72.5" height="287" rx="16" fill="#e86e8f"/>
+    <rect x="486.5" y="529" width="52.5" height="267" rx="10" fill="#fff" fill-opacity="0.18"/>
+
+    <!-- preview -->
+    <g clip-path="url(#ph)">
+      <rect x="607" y="214" width="203" height="596" fill="url(#sky)"/>
+      <circle cx="753.16" cy="631.2" r="20.3" fill="#ffd961"/>
+      <path d="M607 214 L671.96 464.32 L718.65 345.12 L761.28 440.48 L810 321.28 L810 214 Z" fill="#123d47" fill-opacity="0.95"/>
+    </g>
+    <circle cx="708.5" cy="512" r="40.6" fill="#fff" fill-opacity="0.94"/>
+    <path d="M694.7 490.89 L729.61 512 L694.7 533.11 Z" fill="#121a2e"/>
+  </g>
+</svg>

@@ -9,6 +9,8 @@ Browse a folder of photos, animated images, and video clips, then organize files
 
 macOS 15 or later · Apple silicon only · English and Japanese · Works locally without network communication · [MIT License](LICENSE)
 
+Website: [yoshidax.github.io/folzio](https://yoshidax.github.io/folzio/)
+
 ![Folzio showing a folder tree, image thumbnails, and a photo preview](docs/images/screenshot.jpg)
 
 ## Features
