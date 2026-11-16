@@ -7,24 +7,25 @@ struct ConfirmationPolicyTests {
     struct Case: Sendable, CustomTestStringConvertible {
         let kind: FileOperation.Kind
         let origin: OperationOrigin
-        let isSkippable: Bool
+        let target: ConfirmationTarget
 
-        var testDescription: String { "\(kind) / \(origin) → \(isSkippable)" }
+        var testDescription: String { "\(kind) / \(origin) → \(target)" }
     }
 
     static let cases: [Case] = [
-        Case(kind: .copy, origin: .fileList, isSkippable: true),
-        Case(kind: .copy, origin: .tree, isSkippable: true),
-        Case(kind: .trash, origin: .fileList, isSkippable: true),
-        Case(kind: .trash, origin: .tree, isSkippable: false),
-        Case(kind: .move, origin: .fileList, isSkippable: false),
-        Case(kind: .move, origin: .tree, isSkippable: false),
-        Case(kind: .rename(newName: "b"), origin: .fileList, isSkippable: false),
-        Case(kind: .rename(newName: "b"), origin: .tree, isSkippable: false),
+        Case(kind: .copy, origin: .fileList, target: .copy),
+        Case(kind: .copy, origin: .tree, target: .copy),
+        Case(kind: .trash, origin: .fileList, target: .trash),
+        Case(kind: .trash, origin: .tree, target: .trash),
+        Case(kind: .move, origin: .fileList, target: .move),
+        Case(kind: .move, origin: .tree, target: .move),
+        Case(kind: .rename(newName: "b"), origin: .fileList, target: .rename),
+        Case(kind: .rename(newName: "b"), origin: .tree, target: .rename),
     ]
 
-    @Test("Only copy and Trash from the file list can skip confirmation (FR-024, FR-079)", arguments: cases)
-    func isSkippable(_ testCase: Case) {
-        #expect(ConfirmationPolicy.isSkippable(testCase.kind, origin: testCase.origin) == testCase.isSkippable)
+    @Test("Each operation follows its own setting; Trash from the tree follows the Trash setting (FR-024, FR-079)",
+          arguments: cases)
+    func target(_ testCase: Case) {
+        #expect(ConfirmationPolicy.target(for: testCase.kind, origin: testCase.origin) == testCase.target)
     }
 }

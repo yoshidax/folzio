@@ -36,6 +36,11 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        // Commit a name being edited before the menu opens, as the tree does (EC-265).
+        host?.finishRenamingForContextMenu()
+        // A click on an unselected item targets only that item, without changing the selection, like the tree
+        // (FR-397, A-21). Item titles and availability below follow the recorded target.
+        host?.recordContextMenuTarget(clickedIndex: host?.contextClickedIndex)
         // A click on the background shows the displayed folder's menu instead of the selection's (FR-213, R7).
         let isBackground = host?.isContextClickOnBackground ?? false
         if showsBackgroundItems != isBackground {
@@ -49,7 +54,7 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         if !isBackground {
             host?.updateOpenWithMenu(openWithItem)
         }
-        let urls = host?.selectedFileURLs ?? []
+        let urls = host?.operationTarget(for: copyItem).urls ?? []
         if urls.count == 1, let name = urls.first?.lastPathComponent {
             copyItem.title = l10n.text(.contextCopySingle, .text(name))
         } else if urls.count > 1 {
@@ -67,6 +72,10 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         let available = PasteboardImport.availability()
         pasteItem.isEnabled = allowsPaste && available.allowsPaste(move: false)
         movePasteItem.isEnabled = allowsPaste && available.allowsPaste(move: true)
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        host?.contextMenuDidClose()
     }
 
     private func buildMenu() {

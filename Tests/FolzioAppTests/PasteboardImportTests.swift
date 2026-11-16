@@ -123,7 +123,7 @@ extension PasteboardImportTests {
             item.setData(data, forType: type)
             item.setString("https://example.com/copy.jpg", forType: .URL)
             #expect(fixture.board.writeObjects([item]))
-            fixture.settings.confirmation.confirmBeforeFileOperations = true
+            fixture.settings.confirmation = ConfirmationOptions()
             fixture.confirmation.fallbackWindow = { Issue.record("Paste must retain its destination window"); return nil }
             fixture.conflict.fallbackWindow = { Issue.record("Conflict must retain the paste window"); return nil }
             var prompts: [String] = []
@@ -205,7 +205,7 @@ extension PasteboardImportTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = SettingsStore(defaults: defaults)
         settings.viewSettings.lastFolder = destination
-        settings.confirmation.confirmBeforeFileOperations = false
+        settings.confirmation = ConfirmationOptions(copy: false, removeFavorite: false, trash: false)
         let store = ImportCleanupStore(defaults: defaults)
         let pool = ImportStagingPool(factory: { try ImportStaging.create(store: store, temporaryDirectory: root) })
         let manager = ImportSessionManager(pool: pool, automaticTicks: false, showsPanel: false)

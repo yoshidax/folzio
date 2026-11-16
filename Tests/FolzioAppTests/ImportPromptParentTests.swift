@@ -158,7 +158,8 @@ struct ImportPromptParentTests {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = SettingsStore(defaults: defaults)
-        settings.confirmation.confirmBeforeFileOperations = confirms
+        settings.confirmation = confirms
+            ? ConfirmationOptions() : ConfirmationOptions(copy: false, removeFavorite: false, trash: false)
         settings.viewSettings.lastFolder = destination
         let confirmation = ConfirmationPresenter(settings: settings)
         let conflict = ConflictPrompt()

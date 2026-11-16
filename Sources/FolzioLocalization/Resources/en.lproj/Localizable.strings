@@ -439,11 +439,12 @@
 /* Section headings in the Settings window */
 "settings.fileOperations" = "File Operations";
 
-/* Checkboxes in the Settings window */
-"settings.confirm" = "Confirm before copying, moving to the Trash, or removing from Favorites";
-
-/* Supplementary note under the confirmation checkbox in the Settings window. Also its accessibility help */
-"settings.confirm.note" = "Renaming, moving, and moving folders in the directory tree to the Trash are always confirmed, regardless of this setting";
+/* Confirmation checkboxes for each file operation in the Settings window */
+"settings.confirm.copy" = "Confirm before copying";
+"settings.confirm.move" = "Confirm before moving";
+"settings.confirm.rename" = "Confirm before renaming";
+"settings.confirm.removeFavorite" = "Confirm before removing from Favorites";
+"settings.confirm.trash" = "Confirm before moving to the Trash";
 
 /* Section headings in the Settings window */
 "settings.slideshow" = "Slideshow";

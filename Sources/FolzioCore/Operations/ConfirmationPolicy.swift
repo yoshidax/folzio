@@ -1,25 +1,26 @@
 import Foundation
 
-/// Pane from which an operation was started. Used to decide whether the confirmation modal can be skipped
-/// (FR-024, FR-079; research.md R58).
+/// Pane from which an operation was started. The tree's confirmations also show each folder's absolute path
+/// (FR-079, FR-103; research.md R58).
 public enum OperationOrigin: Sendable, Equatable {
     case fileList
     case tree
 }
 
 public enum ConfirmationPolicy {
-    /// Whether confirmation may be skipped when the skip setting (FR-023) is on.
-    /// Copy can always skip, and Trash can skip only from the file list. Rename and move always confirm.
-    public static func isSkippable(_ kind: FileOperation.Kind, origin: OperationOrigin) -> Bool {
+    /// The setting that decides whether the operation confirms (FR-023, FR-024). Every operation that confirms has
+    /// one: moving folders in the tree to the Trash follows the same Trash setting as the file list, because a
+    /// context click targets the clicked item in both panes and the Trash can undo it (FR-079, A-232, A-233).
+    public static func target(for kind: FileOperation.Kind, origin: OperationOrigin) -> ConfirmationTarget {
         switch kind {
         case .copy:
-            return true
+            return .copy
+        case .move:
+            return .move
+        case .rename:
+            return .rename
         case .trash:
-            // In the tree, a row that is not selected can be right-clicked and deleted, so keep confirmation to
-            // prevent mistakes (A-33).
-            return origin == .fileList
-        case .move, .rename:
-            return false
+            return .trash
         }
     }
 }

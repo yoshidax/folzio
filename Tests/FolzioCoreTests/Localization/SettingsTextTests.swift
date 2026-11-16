@@ -17,22 +17,34 @@ struct SettingsTextTests {
         #expect(en.text(.settingsPreviewWheelPan) == "Wheel zoom and drag")
         #expect(en.text(.settingsPreviewScroll) == "Scroll")
     }
-    @Test("The confirmation checkbox and its note are separate sentences in both languages (FR-223)")
-    func confirmationCheckboxAndNote() {
+    @Test("Each operation has its own confirmation checkbox (FR-223)")
+    func confirmationCheckboxes() {
         let ja = LocalizationTestSupport.localizer("ja")
         let en = LocalizationTestSupport.localizer("en")
 
-        #expect(ja.text(.settingsConfirm) == "コピー・ゴミ箱に入れる・お気に入りから削除する前に確認する")
-        #expect(ja.text(.settingsConfirmNote) == "名前の変更・移動と、ツリーのフォルダをゴミ箱に入れる操作は、この設定に関わらず常に確認します")
-        #expect(en.text(.settingsConfirm) == "Confirm before copying, moving to the Trash, or removing from Favorites")
-        #expect(en.text(.settingsConfirmNote) == "Renaming, moving, and moving folders in the directory tree to the Trash are always confirmed, regardless of this setting")
+        #expect(ja.text(.settingsConfirmCopy) == "コピーする前に確認する")
+        #expect(ja.text(.settingsConfirmMove) == "移動する前に確認する")
+        #expect(ja.text(.settingsConfirmRename) == "名前を変更する前に確認する")
+        #expect(ja.text(.settingsConfirmRemoveFavorite) == "お気に入りから削除する前に確認する")
+        #expect(ja.text(.settingsConfirmTrash) == "ゴミ箱に入れる前に確認する")
+        #expect(en.text(.settingsConfirmCopy) == "Confirm before copying")
+        #expect(en.text(.settingsConfirmMove) == "Confirm before moving")
+        #expect(en.text(.settingsConfirmRename) == "Confirm before renaming")
+        #expect(en.text(.settingsConfirmRemoveFavorite) == "Confirm before removing from Favorites")
+        #expect(en.text(.settingsConfirmTrash) == "Confirm before moving to the Trash")
     }
 
-    @Test("The confirmation checkbox no longer carries the always-confirmed operations in parentheses")
-    func confirmationCheckboxHasNoParenthesizedNote() {
+    @Test("The confirmation checkboxes do not carry the always-confirmed operation in parentheses")
+    func confirmationCheckboxesHaveNoParenthesizedNote() {
+        let keys: [TextKey] = [
+            .settingsConfirmCopy, .settingsConfirmMove, .settingsConfirmRename, .settingsConfirmRemoveFavorite,
+            .settingsConfirmTrash,
+        ]
         for language in LocalizationTestSupport.languages {
-            let text = LocalizationTestSupport.localizer(language).text(.settingsConfirm)
-            #expect(!text.contains("（") && !text.contains("("), "\(language): \(text)")
+            for key in keys {
+                let text = LocalizationTestSupport.localizer(language).text(key)
+                #expect(!text.contains("（") && !text.contains("("), "\(language): \(text)")
+            }
         }
     }
 }

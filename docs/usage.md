@@ -90,6 +90,9 @@ For a first look, see the [README](../README.md).
   - When sorting by name, folders always come before files, in both ascending and descending order.
   - Zip files count as files.
 - Right-click the column header to show or hide the Date Created, Kind, Size, and Date Modified columns.
+- Right-clicking an item that is not selected leaves the selection as it is, as in the tree, and the menu acts on
+  that item only. Right-clicking a selected item makes the menu act on all the selected items.
+  - Keyboard shortcuts and the menu bar always act on the selected items.
 
 ### Toolbar
 
@@ -237,7 +240,10 @@ For a first look, see the [README](../README.md).
 - Copy, move, duplicate, rename, move to Trash, drag and drop, and clipboard operations are available.
   Folders include their contents.
 - On a name conflict, choose "Replace", "Keep Both", or "Stop".
-- A confirmation dialog appears before operations. You can skip it in Settings.
+- A confirmation dialog appears before operations.
+  - In Settings (⌘,), you can turn it off separately for copying, moving, renaming, removing from Favorites,
+    and moving to the Trash. "Don’t ask again" in the dialog turns off only that operation.
+  - Moving folders in the directory tree to the Trash follows the same Trash setting as the file list.
 
 ### Drag and Drop
 

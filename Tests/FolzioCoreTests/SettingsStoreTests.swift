@@ -4,6 +4,8 @@ import Testing
 
 @Suite("SettingsStore")
 struct SettingsStoreTests {
+    static let confirmationOff = ConfirmationOptions(copy: false, move: false, rename: false, removeFavorite: false, trash: false)
+
     @Test("Preview mode defaults safely and preserves the selected value")
     func previewInteractionMode() {
         withDefaults { defaults in
@@ -58,7 +60,7 @@ struct SettingsStoreTests {
             #expect(!view.showsToolbar)
             #expect(store.playback.autoplay)
             #expect(store.playback.loop)
-            #expect(store.confirmation.confirmBeforeFileOperations)
+            #expect(store.confirmation == ConfirmationOptions())
             #expect(store.favorites.urls.isEmpty)
         }
     }
@@ -77,7 +79,7 @@ struct SettingsStoreTests {
                 showsToolbar: true
             )
             store.playback = PlaybackOptions(autoplay: false, loop: false)
-            store.confirmation = ConfirmationOptions(confirmBeforeFileOperations: false)
+            store.confirmation = Self.confirmationOff
 
             let view = store.viewSettings
             #expect(view.displayMode == .thumbnails)
@@ -87,7 +89,7 @@ struct SettingsStoreTests {
             #expect(view.showsToolbar)
             #expect(!store.playback.autoplay)
             #expect(!store.playback.loop)
-            #expect(!store.confirmation.confirmBeforeFileOperations)
+            #expect(store.confirmation == Self.confirmationOff)
 
             var hidden = store.viewSettings
             hidden.showsToolbar = false
@@ -321,7 +323,7 @@ struct SettingsStoreTests {
                 showsToolbar: true
             )
             store.playback = PlaybackOptions(autoplay: false, loop: false)
-            store.confirmation = ConfirmationOptions(confirmBeforeFileOperations: false)
+            store.confirmation = Self.confirmationOff
 
             store.favorites = FavoriteFolders(urls: [URL(fileURLWithPath: "/tmp/fav/a", isDirectory: true)])
 
@@ -332,7 +334,7 @@ struct SettingsStoreTests {
             #expect(view.lastFolder?.path == folder.path)
             #expect(view.showsToolbar)
             #expect(store.playback == PlaybackOptions(autoplay: false, loop: false))
-            #expect(!store.confirmation.confirmBeforeFileOperations)
+            #expect(store.confirmation == Self.confirmationOff)
         }
     }
 
@@ -550,7 +552,7 @@ struct SettingsStoreTests {
             let store = SettingsStore(defaults: defaults)
             store.viewSettings = ViewSettings(displayMode: .thumbnails, thumbnailSize: 200, showsToolbar: true)
             store.playback = PlaybackOptions(autoplay: false, loop: false)
-            store.confirmation = ConfirmationOptions(confirmBeforeFileOperations: false)
+            store.confirmation = Self.confirmationOff
             let a = URL(fileURLWithPath: "/tmp/fav/a", isDirectory: true)
             store.favorites = FavoriteFolders(urls: [a], customNames: [a.path: "one"])
 
@@ -560,7 +562,7 @@ struct SettingsStoreTests {
             #expect(store.viewSettings.thumbnailSize == 200)
             #expect(store.viewSettings.showsToolbar)
             #expect(store.playback == PlaybackOptions(autoplay: false, loop: false))
-            #expect(!store.confirmation.confirmBeforeFileOperations)
+            #expect(store.confirmation == Self.confirmationOff)
             #expect(store.favorites.urls == [a])
             #expect(store.favorites.customName(for: a) == "one")
         }

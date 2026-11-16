@@ -134,10 +134,55 @@ public struct SlideshowOptions: Sendable, Equatable {
     }
 }
 
-public struct ConfirmationOptions: Sendable, Equatable {
-    public var confirmBeforeFileOperations: Bool
+/// Operation that has its own confirmation setting (FR-023). The order is the order of the checkboxes in the
+/// Settings window (FR-223).
+public enum ConfirmationTarget: String, CaseIterable, Sendable {
+    case copy
+    case move
+    case rename
+    case removeFavorite
+    case trash
+}
 
-    public init(confirmBeforeFileOperations: Bool = true) {
-        self.confirmBeforeFileOperations = confirmBeforeFileOperations
+/// Whether to show the confirmation modal before each operation (FR-023). Every operation confirms by default.
+public struct ConfirmationOptions: Sendable, Equatable {
+    public var copy: Bool
+    public var move: Bool
+    public var rename: Bool
+    public var removeFavorite: Bool
+    public var trash: Bool
+
+    public init(
+        copy: Bool = true,
+        move: Bool = true,
+        rename: Bool = true,
+        removeFavorite: Bool = true,
+        trash: Bool = true
+    ) {
+        self.copy = copy
+        self.move = move
+        self.rename = rename
+        self.removeFavorite = removeFavorite
+        self.trash = trash
+    }
+
+    public func isEnabled(_ target: ConfirmationTarget) -> Bool {
+        switch target {
+        case .copy: copy
+        case .move: move
+        case .rename: rename
+        case .removeFavorite: removeFavorite
+        case .trash: trash
+        }
+    }
+
+    public mutating func setEnabled(_ isEnabled: Bool, for target: ConfirmationTarget) {
+        switch target {
+        case .copy: copy = isEnabled
+        case .move: move = isEnabled
+        case .rename: rename = isEnabled
+        case .removeFavorite: removeFavorite = isEnabled
+        case .trash: trash = isEnabled
+        }
     }
 }

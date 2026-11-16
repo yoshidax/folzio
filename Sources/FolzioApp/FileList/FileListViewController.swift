@@ -10,7 +10,11 @@ final class FileListViewController: NSViewController {
     private let coordinator: FileOperationCoordinator
     private let listModeView: ListModeView
     private let thumbnailModeView: ThumbnailModeView
-    private lazy var fileContextMenu = FileContextMenu(host: self)
+    private(set) lazy var fileContextMenu = FileContextMenu(host: self)
+    /// The unselected item the last context menu was opened on, or nil when it targeted the selection or the
+    /// background. Kept after the menu closes, because AppKit sends the chosen item's action after `menuDidClose`
+    /// (FR-397, research.md R2).
+    private var contextMenuItemURL: URL?
     private let messageLabel = NSTextField(wrappingLabelWithString: "")
     private let progressIndicator = NSProgressIndicator()
     private let bottomBar = NSView()
@@ -318,6 +322,104 @@ final class FileListViewController: NSViewController {
     /// `..`).
     var selectionItemCommands: ListItemCommands {
         model.selectionItemCommands
+    }
+
+    /// What an item command acts on: the selection, or the unselected item a context menu was opened on (FR-397).
+    struct OperationTarget {
+        /// Items to operate on in listing order, excluding `..` (R30).
+        var urls: [URL]
+        /// Availability of file operations on `urls` (copy, Trash, and so on).
+        var commands: ListItemCommands
+        /// Availability of the commands for `focused` (Rename, Show Contents).
+        var focusedCommands: ListItemCommands
+        /// The item that Rename and Show Contents act on.
+        var focused: URL?
+        /// Whether Rename can act on `focused`: a single item.
+        var allowsRename: Bool
+    }
+
+    /// The row under the last context click in the displayed mode, or nil for the background.
+    var contextClickedIndex: Int? {
+        switch displayMode {
+        case .list:
+            listModeView.contextClickedIndex
+        case .thumbnails:
+            thumbnailModeView.contextClickedIndex
+        }
+    }
+
+    /// Records what the context menu about to open acts on, from the clicked row and the selection, and outlines an
+    /// unselected target in thumbnail view. Does not change the selection (FR-397, A-238).
+    func recordContextMenuTarget(clickedIndex: Int?) {
+        let files = model.listing.files
+        let selected = SelectionIndex.indexes(of: model.selection.selected, in: files.map(\.url))
+        let target = ContextMenuTarget.resolve(clicked: clickedIndex, selected: Set(selected), itemCount: files.count)
+        if case .item(let index) = target {
+            contextMenuItemURL = files[index].url
+            if displayMode == .thumbnails {
+                thumbnailModeView.showContextTarget(at: index)
+            }
+        } else {
+            contextMenuItemURL = nil
+        }
+    }
+
+    /// Removes the outline of the context menu target. The recorded target stays for the chosen item's action.
+    func contextMenuDidClose() {
+        thumbnailModeView.showContextTarget(at: nil)
+    }
+
+    /// Ends a rename in the file list before the context menu opens, committing the name, as a click on another item
+    /// does (EC-265). The keyboard focus stays in the file list, where it already is while renaming.
+    func finishRenamingForContextMenu() {
+        guard let window = view.window,
+              let editor = window.firstResponder as? NSTextView, editor.isFieldEditor,
+              let field = editor.delegate as? NSView,
+              isView(field, inside: listModeView) || isView(field, inside: thumbnailModeView) else { return }
+        window.makeFirstResponder(primaryFocusView)
+    }
+
+    /// Whether `sender` is an item of the file list context menu or of its submenus (Open With).
+    private func isFromContextMenu(_ sender: Any?) -> Bool {
+        var menu = (sender as? NSMenuItem)?.menu
+        while let current = menu {
+            if current === fileContextMenu.menu { return true }
+            menu = current.supermenu
+        }
+        return false
+    }
+
+    /// The target of an item command sent by `sender`. Only the context menu acts on the unselected item it was
+    /// opened on; the keyboard and the menu bar act on the selection (A-239).
+    func operationTarget(for sender: Any?) -> OperationTarget {
+        if isFromContextMenu(sender), let url = contextMenuItemURL {
+            // An item removed from the listing since the menu opened has nothing to act on.
+            guard let index = model.listing.files.firstIndex(where: { $0.url == url }) else {
+                let none = ListItemCommands(
+                    kind: nil, isBrowsingArchive: model.isBrowsingArchive, hasEnclosingLevel: false,
+                    isShowingSearchResults: model.isShowingSearchResults
+                )
+                return OperationTarget(urls: [], commands: none, focusedCommands: none, focused: nil, allowsRename: false)
+            }
+            let file = model.listing.files[index]
+            let commands = model.itemCommands(forRowAt: index)
+            return OperationTarget(
+                urls: file.kind == .parent ? [] : [file.url],
+                commands: commands,
+                focusedCommands: commands,
+                focused: file.url,
+                allowsRename: true
+            )
+        }
+        let selected = model.selection.selected
+        let focused = model.selection.focused
+        return OperationTarget(
+            urls: selectedFileURLs,
+            commands: selectionItemCommands,
+            focusedCommands: focusedItemCommands,
+            focused: focused,
+            allowsRename: selected.count == 1 && focused.map(selected.contains) == true
+        )
     }
 
     /// Whether a name is being edited in the tree or the file list. Disables search, the media type filter, and
@@ -975,8 +1077,9 @@ final class FileListViewController: NSViewController {
     }
 
     @objc func copy(_ sender: Any?) {
-        guard selectionItemCommands.allowsFileOperations else { return }
-        let urls = selectedFileURLs
+        let target = operationTarget(for: sender)
+        guard target.commands.allowsFileOperations else { return }
+        let urls = target.urls
         guard !urls.isEmpty else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -986,9 +1089,10 @@ final class FileListViewController: NSViewController {
     /// Copy as Pathname: puts the absolute path of the single selected item on the pasteboard as a string
     /// (FR-181). Does not touch the selection, focus, or preview (FR-185).
     @objc func copyPathname(_ sender: Any?) {
-        let urls = selectedFileURLs
+        let target = operationTarget(for: sender)
+        let urls = target.urls
         guard !isEditingText,
-              selectionItemCommands.allowsCopyPathname(selectionCount: urls.count),
+              target.commands.allowsCopyPathname(selectionCount: urls.count),
               let url = urls.first else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -1016,9 +1120,10 @@ final class FileListViewController: NSViewController {
     }
 
     @objc func duplicate(_ sender: Any?) {
-        guard selectionItemCommands.allowsFileOperations else { return }
+        let target = operationTarget(for: sender)
+        guard target.commands.allowsFileOperations else { return }
         guard !isEditingText else { return }
-        let urls = selectedFileURLs
+        let urls = target.urls
         guard !urls.isEmpty else { return }
         Task { @MainActor in
             await coordinator.duplicate(urls)
@@ -1026,12 +1131,20 @@ final class FileListViewController: NSViewController {
     }
 
     @objc func rename(_ sender: Any?) {
-        guard focusedItemCommands.allowsFileOperations else { return }
+        let target = operationTarget(for: sender)
+        guard target.focusedCommands.allowsFileOperations else { return }
         guard !isEditingText else { return }
-        let selected = model.selection.selected
-        guard selected.count == 1,
-              let focused = model.selection.focused,
-              selected.contains(focused) else {
+        guard target.allowsRename, let focused = target.focused else { return }
+
+        // An unselected item from the context menu is renamed without changing the selection (FR-398).
+        if !model.selection.selected.contains(focused) {
+            switch displayMode {
+            case .list:
+                _ = listModeView.beginRenaming(url: focused)
+            case .thumbnails:
+                view.window?.makeFirstResponder(thumbnailModeView.focusView)
+                _ = thumbnailModeView.beginRenaming(url: focused)
+            }
             return
         }
 
@@ -1115,9 +1228,10 @@ final class FileListViewController: NSViewController {
     }
 
     @objc func moveToTrash(_ sender: Any?) {
-        guard selectionItemCommands.allowsFileOperations else { return }
+        let target = operationTarget(for: sender)
+        guard target.commands.allowsFileOperations else { return }
         guard !isEditingText else { return }
-        let urls = selectedFileURLs
+        let urls = target.urls
         guard !urls.isEmpty else { return }
         Task { @MainActor in
             await coordinator.trash(urls)
@@ -1125,9 +1239,10 @@ final class FileListViewController: NSViewController {
     }
 
     @objc func open(_ sender: Any?) {
-        guard selectionItemCommands.allowsFileOperations else { return }
+        let target = operationTarget(for: sender)
+        guard target.commands.allowsFileOperations else { return }
         guard !isEditingText else { return }
-        for url in selectedFileURLs {
+        for url in target.urls {
             _ = NSWorkspace.shared.open(url)
         }
     }
@@ -1137,8 +1252,9 @@ final class FileListViewController: NSViewController {
         let applicationURL: URL
     }
 
-    private var openWithFileURL: URL? {
-        let urls = selectedFileURLs
+    /// The single file Open With acts on for a command sent by `sender` (FR-368).
+    private func openWithFileURL(for sender: Any?) -> URL? {
+        let urls = operationTarget(for: sender).urls
         guard !isEditingText, urls.count == 1,
               let url = urls.first,
               let file = model.listing.files.first(where: { $0.url == url }) else { return nil }
@@ -1151,7 +1267,7 @@ final class FileListViewController: NSViewController {
         let submenu = parent.submenu ?? NSMenu(title: parent.title)
         parent.submenu = submenu
         submenu.removeAllItems()
-        guard let fileURL = openWithFileURL else {
+        guard let fileURL = openWithFileURL(for: parent) else {
             parent.isEnabled = false
             return
         }
@@ -1195,7 +1311,7 @@ final class FileListViewController: NSViewController {
 
     @objc private func openWithApplication(_ sender: NSMenuItem) {
         guard let choice = sender.representedObject as? OpenWithChoice,
-              openWithFileURL == choice.fileURL else { return }
+              openWithFileURL(for: sender) == choice.fileURL else { return }
         NSWorkspace.shared.open(
             [choice.fileURL], withApplicationAt: choice.applicationURL, configuration: .init()
         ) { [weak self] _, error in
@@ -1227,17 +1343,19 @@ final class FileListViewController: NSViewController {
     }
 
     @objc func revealInFinder(_ sender: Any?) {
-        guard selectionItemCommands.allowsFileOperations else { return }
-        let urls = selectedFileURLs
+        let target = operationTarget(for: sender)
+        guard target.commands.allowsFileOperations else { return }
+        let urls = target.urls
         guard !urls.isEmpty else { return }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
     /// Opens the focused zip file or directory. If it is `..`, goes up one level (⌘↓, FR-069).
     @objc func openFocusedItem(_ sender: Any?) {
+        let target = operationTarget(for: sender)
         guard !isEditingText,
-              focusedItemCommands.canOpenContainer,
-              let focused = model.selection.focused else {
+              target.focusedCommands.canOpenContainer,
+              let focused = target.focused else {
             return
         }
         openItem(focused)
@@ -1339,7 +1457,7 @@ extension FileListViewController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(openWithApplication(_:)) {
             guard let choice = menuItem.representedObject as? OpenWithChoice else { return false }
-            return openWithFileURL == choice.fileURL
+            return openWithFileURL(for: menuItem) == choice.fileURL
         }
         if menuItem.action == #selector(toggleImagesOnly(_:))
             || menuItem.action == #selector(toggleVideosOnly(_:))
@@ -1354,15 +1472,18 @@ extension FileListViewController: NSMenuItemValidation {
             return !isEditingText && focusedItemCommands.allowsNewFolder
         }
 
+        // Item commands act on the target of `menuItem`: the selection, or the unselected item a context menu was
+        // opened on (FR-397, EC-264).
+        let target = operationTarget(for: menuItem)
         if menuItem.action == #selector(openFocusedItem(_:)) {
-            return !isEditingText && focusedItemCommands.canOpenContainer
+            return !isEditingText && target.focusedCommands.canOpenContainer
         }
         if menuItem.action == #selector(goToEnclosingLevel(_:)) {
             return !isEditingText && focusedItemCommands.canGoUp
         }
 
         // A zip is read-only (FR-073). `..` is not an operation target (R30). ListItemCommands makes the decision.
-        let commands = selectionItemCommands
+        let commands = target.commands
         switch menuItem.action {
         case #selector(copy(_:)),
              #selector(open(_:)),
@@ -1371,12 +1492,13 @@ extension FileListViewController: NSMenuItemValidation {
              #selector(duplicate(_:)):
             if !commands.allowsFileOperations { return false }
         case #selector(rename(_:)):
-            if !focusedItemCommands.allowsFileOperations { return false }
+            if !target.focusedCommands.allowsFileOperations { return false }
         case #selector(copyPathname(_:)):
             return !isEditingText
-                && commands.allowsCopyPathname(selectionCount: selectedFileURLs.count)
+                && commands.allowsCopyPathname(selectionCount: target.urls.count)
         case #selector(paste(_:)), #selector(movePaste(_:)):
-            if !commands.allowsPaste { return false }
+            // Paste acts on the displayed folder, not on an item.
+            if !selectionItemCommands.allowsPaste { return false }
         default:
             break
         }
@@ -1400,10 +1522,9 @@ extension FileListViewController: NSMenuItemValidation {
              #selector(revealInFinder(_:)),
              #selector(moveToTrash(_:)),
              #selector(duplicate(_:)):
-            return !selectedFileURLs.isEmpty
+            return !target.urls.isEmpty
         case #selector(rename(_:)):
-            return model.selection.selected.count == 1
-                && model.selection.focused != nil
+            return target.allowsRename && target.focused != nil
         case #selector(paste(_:)):
             return PasteboardImport.availability().allowsPaste(move: false)
         case #selector(movePaste(_:)):

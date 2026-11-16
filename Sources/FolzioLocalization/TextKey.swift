@@ -211,8 +211,11 @@ public enum TextKey: String, CaseIterable, Sendable {
     case settingsAutoplay = "settings.autoplay"
     case settingsLoop = "settings.loop"
     case settingsFileOperations = "settings.fileOperations"
-    case settingsConfirm = "settings.confirm"
-    case settingsConfirmNote = "settings.confirm.note"
+    case settingsConfirmCopy = "settings.confirm.copy"
+    case settingsConfirmMove = "settings.confirm.move"
+    case settingsConfirmRename = "settings.confirm.rename"
+    case settingsConfirmRemoveFavorite = "settings.confirm.removeFavorite"
+    case settingsConfirmTrash = "settings.confirm.trash"
     case settingsSlideshow = "settings.slideshow"
     case settingsInterval = "settings.interval"
     case settingsSeconds = "settings.seconds"
@@ -848,10 +851,11 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Image interaction mode label in the Settings window"
         case .settingsPreviewWheelPan, .settingsPreviewScroll:
             return "Image interaction mode options"
-        case .settingsAutoplay, .settingsLoop, .settingsConfirm, .settingsRepeat:
+        case .settingsAutoplay, .settingsLoop, .settingsRepeat:
             return "Checkboxes in the Settings window"
-        case .settingsConfirmNote:
-            return "Supplementary note under the confirmation checkbox in the Settings window. Also its accessibility help"
+        case .settingsConfirmCopy, .settingsConfirmMove, .settingsConfirmRename, .settingsConfirmRemoveFavorite,
+             .settingsConfirmTrash:
+            return "Confirmation checkboxes for each file operation in the Settings window"
         case .settingsInterval:
             return "Interval label in the Settings window"
         case .settingsSeconds:

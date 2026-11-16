@@ -563,16 +563,29 @@ final class ListModeView: NSView {
         tableView.clickedRow < 0
     }
 
+    /// The row under the last context click, or nil for the background (FR-397).
+    var contextClickedIndex: Int? {
+        tableView.clickedRow >= 0 ? tableView.clickedRow : nil
+    }
+
     /// Starts renaming the single selected row. Pass `isNewFolder: true` only right after New Folder, so the commit
     /// skips the rename confirmation (FR-211).
     @discardableResult
     func beginRenaming(isNewFolder: Bool = false) -> Bool {
-        guard renamingURL == nil else { return false }
-
         let selected = model.selection.selected
         guard selected.count == 1,
               let focused = model.selection.focused,
-              selected.contains(focused),
+              selected.contains(focused) else {
+            return false
+        }
+        return beginRenaming(url: focused, isNewFolder: isNewFolder)
+    }
+
+    /// Starts renaming the row for `url` whether or not it is selected, for Rename in the context menu of an
+    /// unselected row (FR-398). Does not change the selection.
+    @discardableResult
+    func beginRenaming(url focused: URL, isNewFolder: Bool = false) -> Bool {
+        guard renamingURL == nil,
               let row = model.listing.files.firstIndex(where: { $0.url == focused }),
               let window = tableView.window else {
             return false

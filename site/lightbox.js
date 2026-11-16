@@ -1,5 +1,5 @@
 // Enlarges a screenshot or video to the full viewport width when it is clicked.
-// The backdrop dims the page; Escape or a click on the backdrop zooms it back out and fades it away.
+// The backdrop dims the page; Escape or a click anywhere in the enlarged view closes it.
 (function () {
   var DURATION = 450;
   var EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
@@ -56,20 +56,10 @@
           copy.play();
         }
       }, { once: true });
-      // Inside the enlarged view, a click pauses or resumes the video.
-      copy.addEventListener('click', function (event) {
-        event.stopPropagation();
-        if (copy.paused) {
-          copy.play();
-        } else {
-          copy.pause();
-        }
-      });
     } else {
       copy = document.createElement('img');
       copy.src = source.currentSrc || source.src;
       copy.alt = source.alt;
-      copy.addEventListener('click', function (event) { event.stopPropagation(); });
     }
     copy.className = 'lightbox-media';
     return copy;

@@ -135,7 +135,7 @@ struct ReceivedFileTransferTests {
             let defaults = UserDefaults(suiteName: suite)!
             defer { defaults.removePersistentDomain(forName: suite) }
             let settings = SettingsStore(defaults: defaults)
-            settings.confirmation.confirmBeforeFileOperations = false
+            settings.confirmation = ConfirmationOptions(copy: false, removeFavorite: false, trash: false)
             let model = BrowserModel(kindNames: l10n.kindNames, lister: DirectoryLister(kindNames: l10n.kindNames),
                 decoder: ImageDecoder(), cache: DecodedImageCache(), settings: settings)
             let coordinator = FileOperationCoordinator(model: model, service: FileOperationService(), settings: settings)

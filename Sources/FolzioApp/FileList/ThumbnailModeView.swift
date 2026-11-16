@@ -51,6 +51,7 @@ private final class ThumbnailCollectionView: NSCollectionView {
 
     override var acceptsFirstResponder: Bool { true }
 
+    // Called for right-clicks, Control-clicks, and two-finger clicks alike (A-237).
     override func menu(for event: NSEvent) -> NSMenu? {
         lastMenuLocation = convert(event.locationInWindow, from: nil)
         return super.menu(for: event)
@@ -222,6 +223,11 @@ final class ThumbnailItemView: NSCollectionViewItem {
         didSet { updateSelectionAppearance() }
     }
 
+    /// Whether the open context menu targets this item instead of the selection (FR-397, research.md R5).
+    var isContextTarget = false {
+        didSet { updateSelectionAppearance() }
+    }
+
     func configure(with file: MediaFile, iconPointSize: Double) {
         if isRenaming, representedURL != file.url {
             endRenaming(commit: false, restoreFocus: false)
@@ -282,6 +288,7 @@ final class ThumbnailItemView: NSCollectionViewItem {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        isContextTarget = false
         if isRenaming {
             endRenaming(commit: false, restoreFocus: false)
         }
@@ -354,7 +361,9 @@ final class ThumbnailItemView: NSCollectionViewItem {
         view.layer?.backgroundColor = isHighlighted
             ? NSColor.controlAccentColor.withAlphaComponent(0.25).cgColor
             : NSColor.clear.cgColor
-        view.layer?.borderWidth = isSelected ? 1 : 0
+        // A context menu target that is not selected gets the outline alone, like the ring the list draws around the
+        // clicked row.
+        view.layer?.borderWidth = isSelected ? 1 : (isContextTarget ? 2 : 0)
         view.layer?.borderColor = NSColor.controlAccentColor.cgColor
     }
 }
@@ -447,8 +456,38 @@ final class ThumbnailModeView: NSView {
 
     /// Whether the last context click hit no item, so the file list shows the background menu (FR-213, R7).
     var isContextClickOnBackground: Bool {
-        guard let location = collectionView.lastMenuLocation else { return true }
-        return collectionView.indexPathForItem(at: location) == nil
+        contextClickedIndex == nil
+    }
+
+    /// The item under the last context click, or nil for the background (FR-397).
+    var contextClickedIndex: Int? {
+        guard let location = collectionView.lastMenuLocation else { return nil }
+        return collectionView.indexPathForItem(at: location)?.item
+    }
+
+    /// Item outlined while the context menu targets it instead of the selection (FR-397, research.md R5).
+    private var contextTargetIndex: Int?
+
+    /// Outlines the item at `index` while the context menu is open, or removes the outline (nil).
+    func showContextTarget(at index: Int?) {
+        guard contextTargetIndex != index else { return }
+        if let old = contextTargetIndex,
+           let item = collectionView.item(at: IndexPath(item: old, section: 0)) as? ThumbnailItemView {
+            item.isContextTarget = false
+        }
+        contextTargetIndex = index
+        if let index, let item = collectionView.item(at: IndexPath(item: index, section: 0)) as? ThumbnailItemView {
+            item.isContextTarget = true
+        }
+    }
+
+    /// Starts renaming the item for `url` whether or not it is selected, for Rename in the context menu of an
+    /// unselected item (FR-398). Does not change the selection.
+    @discardableResult
+    func beginRenaming(url: URL) -> Bool {
+        guard onRename != nil else { return false }
+        newFolderRenamingURL = nil
+        return beginRenamingItem(url)
     }
     var onOpenItem: ((URL) -> Void)?
     /// Coordinator of the Quick Look panel, set by the file list controller (FR-247).

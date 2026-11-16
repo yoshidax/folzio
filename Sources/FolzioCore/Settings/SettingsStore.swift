@@ -6,6 +6,11 @@ public enum DisplayLanguageSetting: String, CaseIterable, Sendable {
     case japanese = "ja"
 }
 
+extension Notification.Name {
+    /// Posted after `SettingsStore.confirmation` is written (EC-261). The object is the `UserDefaults` written to.
+    public static let confirmationOptionsDidChange = Notification.Name("Folzio.confirmationOptionsDidChange")
+}
+
 public struct SettingsStore {
     private enum Keys {
         static let displayLanguage = "appearance.language"
@@ -23,7 +28,9 @@ public struct SettingsStore {
         static let toolbarDisplayMode = "view.toolbarDisplayMode"
         static let autoplay = "playback.autoplay"
         static let loop = "playback.loop"
-        static let confirmBeforeExecuting = "fileOps.confirmBeforeExecuting"
+        /// The single setting of earlier versions. Read only as the source of FR-396 and never written.
+        static let legacyConfirmBeforeExecuting = "fileOps.confirmBeforeExecuting"
+        static func confirm(_ target: ConfirmationTarget) -> String { "fileOps.confirm.\(target.rawValue)" }
         static let favoritePaths = "favorites.paths"
         static let favoriteDisplayNames = "favorites.displayNames"
         static let slideshowIntervalSeconds = "slideshow.intervalSeconds"
@@ -164,17 +171,30 @@ public struct SettingsStore {
         }
     }
 
+    /// Reads each operation's setting. An operation whose key is not saved yet takes over the earlier single
+    /// setting (copy, removing from Favorites, Trash) or starts on (move, rename) (FR-396). Writing posts
+    /// `confirmationOptionsDidChange` so an open Settings window can follow (EC-261).
     public var confirmation: ConfirmationOptions {
         get {
-            ConfirmationOptions(
-                confirmBeforeFileOperations: storedBool(forKey: Keys.confirmBeforeExecuting) ?? true
-            )
+            let legacy = storedBool(forKey: Keys.legacyConfirmBeforeExecuting) ?? true
+            var options = ConfirmationOptions()
+            for target in ConfirmationTarget.allCases {
+                let fallback: Bool
+                switch target {
+                case .copy, .removeFavorite, .trash:
+                    fallback = legacy
+                case .move, .rename:
+                    fallback = true
+                }
+                options.setEnabled(storedBool(forKey: Keys.confirm(target)) ?? fallback, for: target)
+            }
+            return options
         }
         nonmutating set {
-            defaults.set(
-                newValue.confirmBeforeFileOperations,
-                forKey: Keys.confirmBeforeExecuting
-            )
+            for target in ConfirmationTarget.allCases {
+                defaults.set(newValue.isEnabled(target), forKey: Keys.confirm(target))
+            }
+            NotificationCenter.default.post(name: .confirmationOptionsDidChange, object: defaults)
         }
     }
 
