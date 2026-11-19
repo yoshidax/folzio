@@ -205,6 +205,8 @@ public enum TextKey: String, CaseIterable, Sendable {
     case settingsPreviewInteraction = "settings.preview.interaction"
     case settingsPreviewWheelPan = "settings.preview.wheelPan"
     case settingsPreviewScroll = "settings.preview.scroll"
+    case settingsFavorites = "settings.favorites"
+    case settingsRestoreFavoritesExpansion = "settings.favorites.restoreExpansion"
     case settingsLanguageEnglish = "settings.language.english"
     case settingsLanguageJapanese = "settings.language.japanese"
     case settingsVideo = "settings.video"
@@ -845,12 +847,14 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Display language label in the Settings window"
         case .settingsLanguageEnglish, .settingsLanguageJapanese:
             return "Display language options. Each language name is shown in that language"
-        case .settingsVideo, .settingsFileOperations, .settingsSlideshow, .settingsPreview:
+        case .settingsVideo, .settingsFileOperations, .settingsSlideshow, .settingsPreview, .settingsFavorites:
             return "Section headings in the Settings window"
         case .settingsPreviewInteraction:
             return "Image interaction mode label in the Settings window"
         case .settingsPreviewWheelPan, .settingsPreviewScroll:
             return "Image interaction mode options"
+        case .settingsRestoreFavoritesExpansion:
+            return "Checkbox and accessibility label for restoring the Favorites heading expansion on the next launch"
         case .settingsAutoplay, .settingsLoop, .settingsRepeat:
             return "Checkboxes in the Settings window"
         case .settingsConfirmCopy, .settingsConfirmMove, .settingsConfirmRename, .settingsConfirmRemoveFavorite,

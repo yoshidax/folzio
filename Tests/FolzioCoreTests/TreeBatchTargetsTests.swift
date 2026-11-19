@@ -53,6 +53,7 @@ struct TreeBatchTargetsTests {
         let targets = TreeBatchTargets(selection: [.folder(a), .folder(b), .folder(c)])
         #expect(targets.trashTargets(roots: roots) == .folders([a, b, c]))
         #expect(targets.dragURLs(roots: roots) == [a, b, c])
+        #expect(targets.duplicateURLs(roots: roots) == [a, b, c])
     }
 
     @Test(
@@ -68,6 +69,7 @@ struct TreeBatchTargetsTests {
         let targets = TreeBatchTargets(selection: [.folder(a), other])
         #expect(targets.trashTargets(roots: roots) == .unavailable)
         #expect(targets.dragURLs(roots: roots) == nil)
+        #expect(targets.duplicateURLs(roots: roots) == nil)
     }
 
     @Test(
@@ -98,11 +100,9 @@ struct TreeBatchTargetsTests {
         #expect(TreeBatchTargets(selection: [.folder(home), .folder(a)]).contextMenu(roots: roots) == folderMenu)
     }
 
-    @Test("The multiple-target menu starts with New Folder like a regular folder menu, which the UI disables (FR-218)")
-    func multipleTargetMenuStartsWithNewFolder() {
-        let menu = TreeBatchTargets(selection: [.folder(a), .folder(b)]).contextMenu(roots: roots)
-        #expect(Array(menu.prefix(2)) == [.newFolder, .separator])
-        #expect(menu.contains(.moveToTrash))
+    @Test("Multiple targets share the folder operation order without New Folder")
+    func multipleTargetMenuOrder() {
+        #expect(TreeBatchTargets(selection: [.folder(a), .folder(b)]).contextMenu(roots: roots) == FolderContextMenu.items(allowsModification: true))
     }
 
     // MARK: Overlap (EC-146)

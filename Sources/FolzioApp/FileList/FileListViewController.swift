@@ -11,10 +11,18 @@ final class FileListViewController: NSViewController {
     private let listModeView: ListModeView
     private let thumbnailModeView: ThumbnailModeView
     private(set) lazy var fileContextMenu = FileContextMenu(host: self)
-    /// The unselected item the last context menu was opened on, or nil when it targeted the selection or the
-    /// background. Kept after the menu closes, because AppKit sends the chosen item's action after `menuDidClose`
-    /// (FR-397, research.md R2).
-    private var contextMenuItemURL: URL?
+    /// Captured item-menu focus and targets. Kept after closing because AppKit sends the chosen action after
+    /// `menuDidClose`. Keyboard and menu bar commands continue to use the live selection (FR-397).
+    private struct ContextMenuSnapshot {
+        let targets: Set<URL>
+        let listedTargets: Set<URL>
+        let operableURLs: [URL]
+        let focused: URL?
+    }
+    private var contextMenuSnapshot: ContextMenuSnapshot?
+    private(set) var contextMenuIsBackground = false
+    var canAddFavorite: ((URL) -> Bool)?
+    var onAddFavorite: ((URL) -> Void)?
     private let messageLabel = NSTextField(wrappingLabelWithString: "")
     private let progressIndicator = NSProgressIndicator()
     private let bottomBar = NSView()
@@ -221,17 +229,6 @@ final class FileListViewController: NSViewController {
         }
     }
 
-    /// Whether the last context click hit no row or item, so the context menu targets the displayed folder
-    /// (FR-213, research.md R7).
-    var isContextClickOnBackground: Bool {
-        switch displayMode {
-        case .list:
-            listModeView.isContextClickOnBackground
-        case .thumbnails:
-            thumbnailModeView.isContextClickOnBackground
-        }
-    }
-
     /// Whether New Folder can create a folder in the displayed folder (FR-212). Unavailable inside a zip, while
     /// showing search results, and when the displayed folder cannot be read.
     var canCreateFolderInDisplayedFolder: Bool {
@@ -354,13 +351,24 @@ final class FileListViewController: NSViewController {
         let files = model.listing.files
         let selected = SelectionIndex.indexes(of: model.selection.selected, in: files.map(\.url))
         let target = ContextMenuTarget.resolve(clicked: clickedIndex, selected: Set(selected), itemCount: files.count)
+        contextMenuIsBackground = target == .background
+        switch target {
+        case .item(let index):
+            let file = files[index]
+            contextMenuSnapshot = ContextMenuSnapshot(targets: [file.url], listedTargets: [file.url],
+                operableURLs: file.kind == .parent ? [] : [file.url], focused: file.url)
+        case .selection:
+            let targets = model.selection.selected
+            contextMenuSnapshot = ContextMenuSnapshot(targets: targets,
+                listedTargets: Set(files.lazy.filter { targets.contains($0.url) }.map(\.url)),
+                operableURLs: model.operableSelection, focused: model.selection.focused)
+        case .background:
+            contextMenuSnapshot = nil
+        }
         if case .item(let index) = target {
-            contextMenuItemURL = files[index].url
             if displayMode == .thumbnails {
                 thumbnailModeView.showContextTarget(at: index)
             }
-        } else {
-            contextMenuItemURL = nil
         }
     }
 
@@ -389,27 +397,20 @@ final class FileListViewController: NSViewController {
         return false
     }
 
-    /// The target of an item command sent by `sender`. Only the context menu acts on the unselected item it was
-    /// opened on; the keyboard and the menu bar act on the selection (A-239).
+    /// Item menus retain their captured targets; keyboard and menu bar commands use the live selection (A-239).
     func operationTarget(for sender: Any?) -> OperationTarget {
-        if isFromContextMenu(sender), let url = contextMenuItemURL {
-            // An item removed from the listing since the menu opened has nothing to act on.
-            guard let index = model.listing.files.firstIndex(where: { $0.url == url }) else {
-                let none = ListItemCommands(
-                    kind: nil, isBrowsingArchive: model.isBrowsingArchive, hasEnclosingLevel: false,
-                    isShowingSearchResults: model.isShowingSearchResults
-                )
-                return OperationTarget(urls: [], commands: none, focusedCommands: none, focused: nil, allowsRename: false)
-            }
-            let file = model.listing.files[index]
-            let commands = model.itemCommands(forRowAt: index)
-            return OperationTarget(
-                urls: file.kind == .parent ? [] : [file.url],
-                commands: commands,
-                focusedCommands: commands,
-                focused: file.url,
-                allowsRename: true
-            )
+        if isFromContextMenu(sender), let snapshot = contextMenuSnapshot {
+            let files = model.listing.files.filter { snapshot.targets.contains($0.url) }
+            // Keep initially unlisted selection URLs, but never replace a row that vanished after capture.
+            let valid = snapshot.listedTargets.isSubset(of: Set(files.map(\.url)))
+            let focused = valid ? snapshot.focused : nil
+            let kind = focused.flatMap { url in files.first { $0.url == url }?.kind }
+            let operable = valid ? snapshot.operableURLs : []
+            let focusedCommands = model.itemCommands(kind: kind)
+            let commands = focusedCommands.forSelection(hasOperableTargets: !operable.isEmpty)
+            return OperationTarget(urls: operable, commands: commands, focusedCommands: focusedCommands,
+                focused: focused, allowsRename: valid && snapshot.targets.count == 1
+                    && focused.map(snapshot.targets.contains) == true)
         }
         let selected = model.selection.selected
         let focused = model.selection.focused
@@ -420,6 +421,34 @@ final class FileListViewController: NSViewController {
             focused: focused,
             allowsRename: selected.count == 1 && focused.map(selected.contains) == true
         )
+    }
+
+    private func folderPolicy(useContext: Bool) -> FolderContextMenu {
+        let targets = useContext ? (contextMenuSnapshot?.targets ?? model.selection.selected) : model.selection.selected
+        return FolderContextMenu(files: model.listing.files, targets: targets,
+            isBrowsingArchive: model.isBrowsingArchive, roots: model.navigationRoots)
+    }
+
+    var contextMenuFolderPolicy: FolderContextMenu { folderPolicy(useContext: true) }
+
+    func pasteDestination(for sender: Any?) -> URL? {
+        folderPolicy(useContext: isFromContextMenu(sender)).pasteDestination(
+            isItemMenu: isFromContextMenu(sender) && !contextMenuIsBackground,
+            displayedFolder: model.listing.folder, isShowingSearchResults: model.isShowingSearchResults)
+    }
+
+    func favoriteAdditionTarget(for sender: Any?) -> URL? {
+        folderPolicy(useContext: isFromContextMenu(sender)).singleFolder
+    }
+
+    func canAddToFavorites(_ sender: Any?) -> Bool {
+        guard !isEditingText, let url = favoriteAdditionTarget(for: sender) else { return false }
+        return canAddFavorite?(url) ?? false
+    }
+
+    @objc func addToFavorites(_ sender: Any?) {
+        guard canAddToFavorites(sender), let url = favoriteAdditionTarget(for: sender) else { return }
+        onAddFavorite?(url)
     }
 
     /// Whether a name is being edited in the tree or the file list. Disables search, the media type filter, and
@@ -1081,9 +1110,7 @@ final class FileListViewController: NSViewController {
         guard target.commands.allowsFileOperations else { return }
         let urls = target.urls
         guard !urls.isEmpty else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects(urls as [NSURL])
+        PasteboardFileURLs.write(urls, to: .general)
     }
 
     /// Copy as Pathname: puts the absolute path of the single selected item on the pasteboard as a string
@@ -1100,9 +1127,7 @@ final class FileListViewController: NSViewController {
     }
 
     @objc func paste(_ sender: Any?) {
-        guard focusedItemCommands.allowsPaste else { return }
-        guard !isEditingText else { return }
-        let folder = model.listing.folder
+        guard !isEditingText, let folder = pasteDestination(for: sender) else { return }
         let window = view.window
         Task { @MainActor in
             await coordinator.paste(into: folder, move: false, parentWindow: window)
@@ -1110,9 +1135,7 @@ final class FileListViewController: NSViewController {
     }
 
     @objc func movePaste(_ sender: Any?) {
-        guard focusedItemCommands.allowsPaste else { return }
-        guard !isEditingText else { return }
-        let folder = model.listing.folder
+        guard !isEditingText, let folder = pasteDestination(for: sender) else { return }
         let window = view.window
         Task { @MainActor in
             await coordinator.paste(into: folder, move: true, parentWindow: window)
@@ -1122,7 +1145,8 @@ final class FileListViewController: NSViewController {
     @objc func duplicate(_ sender: Any?) {
         let target = operationTarget(for: sender)
         guard target.commands.allowsFileOperations else { return }
-        guard !isEditingText else { return }
+        guard !isEditingText,
+              !folderPolicy(useContext: isFromContextMenu(sender)).containsProtectedFolder else { return }
         let urls = target.urls
         guard !urls.isEmpty else { return }
         Task { @MainActor in
@@ -1132,7 +1156,8 @@ final class FileListViewController: NSViewController {
 
     @objc func rename(_ sender: Any?) {
         let target = operationTarget(for: sender)
-        guard target.focusedCommands.allowsFileOperations else { return }
+        guard target.focusedCommands.allowsFileOperations,
+              !folderPolicy(useContext: isFromContextMenu(sender)).containsProtectedFolder else { return }
         guard !isEditingText else { return }
         guard target.allowsRename, let focused = target.focused else { return }
 
@@ -1230,7 +1255,7 @@ final class FileListViewController: NSViewController {
     @objc func moveToTrash(_ sender: Any?) {
         let target = operationTarget(for: sender)
         guard target.commands.allowsFileOperations else { return }
-        guard !isEditingText else { return }
+        guard !isEditingText, !folderPolicy(useContext: isFromContextMenu(sender)).containsProtectedFolder else { return }
         let urls = target.urls
         guard !urls.isEmpty else { return }
         Task { @MainActor in
@@ -1465,6 +1490,7 @@ extension FileListViewController: NSMenuItemValidation {
             return !isEditingText
         }
 
+        if menuItem.action == #selector(addToFavorites(_:)) { return canAddToFavorites(menuItem) }
         if menuItem.action == #selector(newFolder(_:)) {
             return !isEditingText && canCreateFolderInDisplayedFolder
         }
@@ -1484,6 +1510,9 @@ extension FileListViewController: NSMenuItemValidation {
 
         // A zip is read-only (FR-073). `..` is not an operation target (R30). ListItemCommands makes the decision.
         let commands = target.commands
+        if (menuItem.action == #selector(moveToTrash(_:)) || menuItem.action == #selector(rename(_:))
+            || menuItem.action == #selector(duplicate(_:))),
+           folderPolicy(useContext: isFromContextMenu(menuItem)).containsProtectedFolder { return false }
         switch menuItem.action {
         case #selector(copy(_:)),
              #selector(open(_:)),
@@ -1497,8 +1526,7 @@ extension FileListViewController: NSMenuItemValidation {
             return !isEditingText
                 && commands.allowsCopyPathname(selectionCount: target.urls.count)
         case #selector(paste(_:)), #selector(movePaste(_:)):
-            // Paste acts on the displayed folder, not on an item.
-            if !selectionItemCommands.allowsPaste { return false }
+            if pasteDestination(for: menuItem) == nil { return false }
         default:
             break
         }

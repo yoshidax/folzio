@@ -558,11 +558,6 @@ final class ListModeView: NSView {
         !isHidden && lastURLs.contains(url)
     }
 
-    /// Whether the last context click hit no row, so the file list shows the background menu (FR-213, R7).
-    var isContextClickOnBackground: Bool {
-        tableView.clickedRow < 0
-    }
-
     /// The row under the last context click, or nil for the background (FR-397).
     var contextClickedIndex: Int? {
         tableView.clickedRow >= 0 ? tableView.clickedRow : nil

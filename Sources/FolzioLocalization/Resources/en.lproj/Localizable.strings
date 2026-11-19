@@ -865,7 +865,7 @@
 "shortcuts.entry.addFavorite" = "Add the selected folder to Favorites";
 
 /* Availability note below a shortcut reference action */
-"shortcuts.condition.addFavorite" = "Unavailable for existing favorites or the heading, while renaming, or when the tree is hidden.";
+"shortcuts.condition.addFavorite" = "Adds one folder from the file list when it has focus, otherwise the tree selection. Unavailable for existing favorites, multiple items, the heading, while renaming or typing, or when the target pane is hidden.";
 
 /* Action description in the shortcut reference */
 "shortcuts.entry.selection" = "Move the selection";
@@ -898,10 +898,10 @@
 "shortcuts.condition.rename" = "Return confirms and Esc cancels. Renames a favorite’s display name or a regular folder’s actual name in the tree; unavailable inside a zip in the file list.";
 
 /* Action description in the shortcut reference */
-"shortcuts.entry.copy" = "Copy selected files";
+"shortcuts.entry.copy" = "Copy selected items";
 
 /* Availability note below a shortcut reference action */
-"shortcuts.condition.copy" = "In the file list; unavailable inside a zip.";
+"shortcuts.condition.copy" = "In the file list and on tree folders; unavailable inside a zip.";
 
 /* Action description in the shortcut reference */
 "shortcuts.entry.paste" = "Paste or move items here";
@@ -919,7 +919,7 @@
 "shortcuts.entry.duplicate" = "Duplicate selected items";
 
 /* Availability note below a shortcut reference action */
-"shortcuts.condition.duplicate" = "In the file list; unavailable inside a zip.";
+"shortcuts.condition.duplicate" = "In the file list and on tree folders; unavailable for tree roots or inside a zip.";
 
 /* Action description in the shortcut reference */
 "shortcuts.entry.newFolder" = "Create a new folder";
@@ -1069,3 +1069,5 @@
 "settings.preview.interaction" = "Image interaction";
 "settings.preview.wheelPan" = "Wheel zoom and drag";
 "settings.preview.scroll" = "Scroll";
+"settings.favorites" = "Favorites";
+"settings.favorites.restoreExpansion" = "Restore previous expansion state on launch";

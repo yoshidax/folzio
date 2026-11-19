@@ -420,6 +420,7 @@ final class ThumbnailModeView: NSView {
     private var lastContentChangeGeneration = 0
     private var isApplyingSelection = false
     private var lastSelectedURL: URL?
+    private var lastTrashSelectionGeneration = 0
     private var selectionAnchor: Int?
     private var keepSelectionAnchorOnModelChange = false
     private var requests: [URL: ThumbnailRequest] = [:]
@@ -452,11 +453,6 @@ final class ThumbnailModeView: NSView {
     /// rename, so naming a new folder waits until its item has been applied (FR-210).
     func hasAppliedItem(for url: URL) -> Bool {
         !isHidden && lastURLs.contains(url)
-    }
-
-    /// Whether the last context click hit no item, so the file list shows the background menu (FR-213, R7).
-    var isContextClickOnBackground: Bool {
-        contextClickedIndex == nil
     }
 
     /// The item under the last context click, or nil for the background (FR-397).
@@ -750,6 +746,7 @@ final class ThumbnailModeView: NSView {
             _ = model.selection.selected
             _ = model.selection.focused
             _ = model.contentChangeGeneration
+            _ = model.trashSelectionGeneration
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.applyModel()
@@ -796,6 +793,8 @@ final class ThumbnailModeView: NSView {
         }
         isApplyingSelection = false
 
+        let revealTrashSelection = lastTrashSelectionGeneration != model.trashSelectionGeneration
+        lastTrashSelectionGeneration = model.trashSelectionGeneration
         lastSelectedURL = model.selection.focused
         if keepSelectionAnchorOnModelChange {
             keepSelectionAnchorOnModelChange = false
@@ -804,6 +803,10 @@ final class ThumbnailModeView: NSView {
             selectionAnchor = index
         } else {
             selectionAnchor = nil
+        }
+        if revealTrashSelection, let focused = model.selection.focused,
+           let index = urls.firstIndex(of: focused) {
+            scrollItemIntoView(at: index)
         }
     }
 
@@ -1004,14 +1007,15 @@ final class ThumbnailModeView: NSView {
                 .min()
         }
 
-        guard let target = FocusNavigator.targetIndex(
-            currentIndex: currentIndex,
-            fileCount: files.count,
-            move: move,
-            layout: .grid(columns: currentColumnCount)
-        ) else {
-            return true
-        }
+        let disallowed: NSEvent.ModifierFlags = [.shift, .command, .option, .control]
+        let entersEmptySelection = model.selection.selected.isEmpty && model.selection.focused == nil
+            && (key == .upArrow || key == .downArrow)
+            && modifiers.intersection(disallowed).isEmpty
+        let target = entersEmptySelection
+            ? FocusNavigator.emptySelectionIndex(fileCount: files.count, move: move)
+            : FocusNavigator.targetIndex(currentIndex: currentIndex, fileCount: files.count, move: move,
+                layout: .grid(columns: currentColumnCount))
+        guard let target else { return true }
 
         if modifiers.contains(.shift), let currentIndex {
             let anchor = selectionAnchor ?? currentIndex

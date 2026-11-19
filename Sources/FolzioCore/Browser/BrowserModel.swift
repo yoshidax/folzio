@@ -60,6 +60,9 @@ public final class BrowserModel {
     public private(set) var selection: SelectionState
     public private(set) var preview: PreviewContent
     public private(set) var stopPlaybackSignal = 0
+    /// Requests minimal scrolling to a focus chosen after Move to Trash, without changing keyboard focus.
+    public private(set) var trashSelectionGeneration = 0
+    @ObservationIgnored private var selectionIntentGeneration = 0
     /// Incremented each time rows keep their URL but their content is found to be replaced (FR-228, research.md R4).
     /// The file list reloads only the rows in `changedContentURLs` when the URL order is unchanged.
     public private(set) var contentChangeGeneration = 0
@@ -125,6 +128,7 @@ public final class BrowserModel {
                 isRevertingSortOrder = false
                 return
             }
+            invalidatePendingTrashSelection()
             if sortOrder.column != .location {
                 var settingsValue = settings.viewSettings
                 settingsValue.sortOrder = sortOrder
@@ -151,7 +155,7 @@ public final class BrowserModel {
     private let searcher: any FileNameSearching
 
     /// Tree roots (home and volumes). Determine the `..` and ⌘↑ enclosing folder for regular folders (R30).
-    private var navigationRoots: [URL] = []
+    public private(set) var navigationRoots: [URL] = []
     /// Every root passed to `setNavigationRoots`, including volumes that were removed later. Keeps the root of a
     /// removed volume known so that its vanished folders are not replaced by a folder outside it (EC-18).
     private var knownRoots: Set<URL> = []
@@ -258,6 +262,7 @@ public final class BrowserModel {
     /// Updates kind names and ordering after a language change without re-enumerating the disk.
     public func setKindNames(_ names: KindNames) {
         guard names != kindNames else { return }
+        invalidatePendingTrashSelection()
         kindNames = names
         kindUpdateGeneration &+= 1
         let generation = kindUpdateGeneration
@@ -393,6 +398,7 @@ public final class BrowserModel {
     public func didRenameItem(at oldURL: URL, to newURL: URL) {
         guard isShowingSearchResults,
               let index = allFiles.firstIndex(where: { $0.url == oldURL }) else { return }
+        invalidatePendingTrashSelection()
         let old = allFiles[index]
         let newKind: ListItemKind
         if old.kind == .archive {
@@ -525,6 +531,7 @@ public final class BrowserModel {
         }
 
         guard changed || filesChanged || selectionChanged || additionalSearchRoot != nil else { return }
+        invalidatePendingTrashSelection()
 
         let folderChanged = updated.folder != listing.folder
         // Use for rebasing index rows when a zip is displayed, including while opening.
@@ -622,7 +629,7 @@ public final class BrowserModel {
         if restricted.focused == selection.focused {
             selection = restricted
         } else {
-            select(restricted.selected, focused: restricted.focused)
+            setSelection(restricted.selected, focused: restricted.focused)
         }
     }
 
@@ -732,6 +739,13 @@ public final class BrowserModel {
     }
 
     public func select(_ urls: Set<URL>, focused: URL?) {
+        if selection.selected != urls || selection.focused != focused {
+            invalidatePendingTrashSelection()
+        }
+        setSelection(urls, focused: focused)
+    }
+
+    private func setSelection(_ urls: Set<URL>, focused: URL?) {
         let previousFocused = selection.focused
         selection = SelectionState(selected: urls, focused: focused)
         if previousFocused != focused {
@@ -741,6 +755,46 @@ public final class BrowserModel {
         schedulePrefetch(around: focused)
     }
 
+    /// Captures the original order before the first suspension of a file-list Move to Trash.
+    public func selectionBeforeTrashing(_ urls: [URL]) -> PostTrashSelection? {
+        guard tracksTrashSelection else { return nil }
+        return PostTrashSelection(orderedFiles: listing.files, targets: Set(urls), selection: selection,
+            navigationGeneration: navigationGeneration, intentGeneration: selectionIntentGeneration)
+    }
+
+    /// Applies a completed operation only while the user's location, display conditions, and selection intent match.
+    /// Returns a continuation for rechecking the original candidates after asynchronous search pruning.
+    @discardableResult
+    public func applySelectionAfterTrashing(_ snapshot: PostTrashSelection, removed: [URL]) -> PostTrashSelection? {
+        guard snapshot.navigationGeneration == navigationGeneration,
+              snapshot.intentGeneration == selectionIntentGeneration,
+              tracksTrashSelection else { return nil }
+        guard let next = snapshot.selection(afterRemoving: Set(removed), remainingURLs: listing.files.map(\.url)) else { return nil }
+        let changedFocus = selection.focused != next.focused
+        if changedFocus {
+            select(next.selected, focused: next.focused)
+            trashSelectionGeneration &+= 1
+        } else if selection.selected != next.selected {
+            // Keep an unchanged preview and video position when only the selected set changes.
+            selection = next
+            invalidatePendingTrashSelection()
+        }
+        return snapshot.continuing(withIntentGeneration: selectionIntentGeneration)
+    }
+
+    private var tracksTrashSelection: Bool {
+        guard listing.archive == nil else { return false }
+        switch listing.state {
+        case .loaded, .empty, .noMatches: return true
+        case .loading, .denied, .failed: return false
+        }
+    }
+
+    /// User changes invalidate automatic selection; watcher-driven pruning intentionally does not.
+    private func invalidatePendingTrashSelection() {
+        selectionIntentGeneration &+= 1
+    }
+
     /// Applies the slideshow target to the selection (FR-127). When the same URL is already focused, does not
     /// reload the preview, only narrows the selection to that one item, and keeps the video playback position.
     /// Returns true only when the focus actually changed.
@@ -748,6 +802,7 @@ public final class BrowserModel {
     public func synchronizeSlideshowSelection(to url: URL) -> Bool {
         if selection.focused == url {
             if selection.selected != [url] {
+                invalidatePendingTrashSelection()
                 selection = SelectionState(selected: [url], focused: url)
                 return true
             }
@@ -759,6 +814,7 @@ public final class BrowserModel {
 
     public func setMediaTypeFilter(_ filter: MediaTypeFilter) {
         guard filter != mediaTypeFilter else { return }
+        invalidatePendingTrashSelection()
         mediaTypeFilter = filter
         rebuildListingForFilterChange()
     }
@@ -772,6 +828,7 @@ public final class BrowserModel {
         let filter = NameFilter(text: text)
         guard filter != nameFilter else { return }
         let changesRows = filter.pattern != nameFilter.pattern
+        invalidatePendingTrashSelection()
         nameFilter = filter
         guard changesRows else { return }
         rebuildListingForFilterChange()
@@ -802,7 +859,7 @@ public final class BrowserModel {
             selection = restricted
             schedulePrefetch(around: restricted.focused)
         } else {
-            select(restricted.selected, focused: restricted.focused)
+            setSelection(restricted.selected, focused: restricted.focused)
         }
     }
 
@@ -832,6 +889,7 @@ public final class BrowserModel {
     /// rows (FR-097).
     public func setShowsZipFiles(_ shows: Bool) {
         guard shows != showsZipFiles else { return }
+        invalidatePendingTrashSelection()
         showsZipFiles = shows
         var viewSettings = settings.viewSettings
         viewSettings.showsZipFiles = shows
@@ -852,7 +910,7 @@ public final class BrowserModel {
             selection = restricted
             schedulePrefetch(around: restricted.focused)
         } else {
-            select(restricted.selected, focused: restricted.focused)
+            setSelection(restricted.selected, focused: restricted.focused)
         }
     }
 
@@ -886,6 +944,7 @@ public final class BrowserModel {
             let focused = selection.focused.flatMap { available.contains($0) ? $0 : nil }
             selection = SelectionState(selected: selected, focused: focused)
             if focused == nil {
+                if case .video = preview { stopPlaybackSignal &+= 1 }
                 previewTask?.cancel()
                 previewTask = nil
                 previewGeneration += 1
@@ -1519,7 +1578,7 @@ public final class BrowserModel {
         if restricted.focused == selection.focused {
             selection = restricted
         } else {
-            select(restricted.selected, focused: restricted.focused)
+            setSelection(restricted.selected, focused: restricted.focused)
         }
     }
 
@@ -1622,8 +1681,7 @@ public final class BrowserModel {
     }
 
     private func isMovedSearchPath(_ url: URL) -> Bool {
-        let path = url.standardizedFileURL.path
-        return movedSearchPaths.contains { path == $0 || path.hasPrefix($0 == "/" ? "/" : $0 + "/") }
+        SearchRemovalScope.contains(url, in: movedSearchPaths)
     }
 
     /// Removes rows from search results and restricts the selection. When focus is lost, clears the preview and stops

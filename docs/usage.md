@@ -50,11 +50,20 @@ For a first look, see the [README](../README.md).
   - Not available when the selection includes home, the top level of a volume, or a favorite.
     Also not available when it includes both a folder and a folder inside it.
   - If you move the folder being shown to the Trash, the file list shows its parent.
+- Select folders in the tree and press ⌘C to copy or ⌘D to duplicate them. The context menu works too,
+  and a multiple selection is handled together.
+  - Copy also works on home and the top level of a volume. Duplicate is not available when the selection includes them.
+- The context menu of a folder lists the same commands in the same order in the tree and the file list.
+  - "Paste Here" (ここにペースト) and "Move Item Here" (ここに移動ペースト) paste into the folder you right-clicked.
 
 ### Favorites
 
 - "Favorites" (お気に入り) at the top of the tree holds frequently used folders.
-- To add a folder, right-click it in the tree and choose "Add to Favorites" (お気に入りに追加), or press ⌃⌘T.
+- To add a folder, right-click it in the tree or the file list and choose "Add to Favorites" (お気に入りに追加),
+  or press ⌃⌘T.
+  - ⌃⌘T and File → "Add to Favorites" add the one folder selected in the file list when the file list has focus,
+    and the folder selected in the tree otherwise.
+  - Adding a favorite does not change the selection, the displayed folder, or search results.
 - To remove an entry, right-click it and choose "Remove from Favorites" (お気に入りから削除), or press ⌘Delete.
   - A confirmation shows the display name and the absolute path.
   - The actual folder is not changed.
@@ -66,6 +75,9 @@ For a first look, see the [README](../README.md).
 - ⇧⌘F jumps to the Favorites heading.
 - Favorites are saved and restored on the next launch.
   Folders that cannot be found stay in the list, dimmed.
+- The Favorites heading starts collapsed by default. To restore its last expanded or collapsed state, turn on
+  "Restore previous expansion state on launch" in Settings (⌘,) → Favorites.
+  - This option is off by default. Changes apply on the next launch and leave the current heading as it is.
 
 ### Folders in the File List
 
@@ -76,6 +88,10 @@ For a first look, see the [README](../README.md).
 - When you move between folders in the list, the tree selection follows.
   Keyboard focus stays on the file list.
 - Folders can be copied, renamed, moved, and moved to the Trash just like files.
+- The context menu of a folder has no "Open" or "Open With". Use "Show in Finder" to open it in Finder.
+- Right-click one folder and choose "Paste Here" or "Move Item Here" to paste into that folder.
+  - Pasting from the background context menu, with ⌘V or ⌥⌘V, or from the menu bar still uses the displayed folder.
+  - Paste is not available when you right-click several folders, or folders mixed with files.
 
 ### Changes Outside the App
 
@@ -279,7 +295,7 @@ For a first look, see the [README](../README.md).
   or a folder in list view, thumbnail view, or search results. Drop on the background of a regular folder's
   file list to save there. Images are copied; modifier keys can prevent a drop if the browser does not allow copying.
 - In the browser, choose “Copy Image”, then press ⌘V or choose “Paste” in Folzio's file list to save in the displayed folder.
-  In the tree, select one regular folder and press ⌘V, or right-click it and choose “Paste Here”.
+  In the tree, select one regular folder and press ⌘V. In the tree or the file list, right-click a folder and choose “Paste Here”.
   Image data is saved as PNG, using the image URL's name when available, or a name such as `Image 2026-11-10 18.00.00.png`.
   When converting data with several frames or pages, only the first is saved.
 - If the clipboard contains files, those files are pasted instead of an accompanying image.
@@ -300,11 +316,12 @@ For a first look, see the [README](../README.md).
 ### New Folders
 
 - Press ⇧⌘N, choose File → "New Folder" (新規フォルダ),
-  or use the context menu of a tree folder or the file list's background.
+  or use the context menu of a favorite or the file list's background.
+  - The context menu of a folder row has no "New Folder".
 - A folder named "untitled folder" is created, and you name it in place. There is no confirmation.
 - Where the folder is created:
   - In the file list: inside the displayed folder
-  - In the tree: inside the selected or right-clicked folder
+  - In the tree: inside the selected folder
   - On a favorite: inside the registered folder
 - Not available inside a zip, in search results, on the "Favorites" heading, or for a missing favorite.
 
@@ -437,7 +454,8 @@ The toolbar search field filters the list you are viewing by name. To look throu
 ### Working with Results
 
 - Preview, copy, duplicate, rename, move to Trash, and move all work on search results.
-- Paste, move-paste, and ⌘↑ do not.
+- Pasting from the background, with ⌘V or ⌥⌘V, or from the menu bar does not work, and neither does ⌘↑.
+  - "Paste Here" and "Move Item Here" on one right-clicked folder work, and the search results stay shown.
 - Rows that are moved to the Trash, moved, or deleted outside the app are removed,
   along with the results inside them.
 - Renamed rows stay under their new name.
@@ -505,7 +523,7 @@ The toolbar search field filters the list you are viewing by name. To look throu
 | Expand / collapse a folder in the tree | → / ←, double-click a folder row |
 | Select several folders in the tree | ⌘-click, Shift-click, Shift+↑ / ↓ |
 | Move tree folders to the Trash | ⌘Delete, "Move to Trash" in the context menu |
-| Add to Favorites | ⌃⌘T, tree context menu |
+| Add to Favorites | ⌃⌘T, the context menu of a folder in the tree or the file list |
 | Rename a favorite | Return, "Rename" in the context menu, Edit menu → "Rename" |
 | Remove from Favorites | ⌘Delete, the favorite's context menu |
 | Jump to the "Favorites" heading | ⇧⌘F |
@@ -532,9 +550,9 @@ The toolbar search field filters the list you are viewing by name. To look throu
 
 | Action | Default shortcut |
 |--------|----------|
-| Copy / paste / move-paste | ⌘C / ⌘V / ⌥⌘V |
-| Duplicate | ⌘D |
-| New folder | ⇧⌘N, File menu → "New Folder", context menu |
+| Copy / paste / move-paste | ⌘C / ⌘V / ⌥⌘V (also on tree folders) |
+| Duplicate | ⌘D (also on tree folders) |
+| New folder | ⇧⌘N, File menu → "New Folder", background context menu |
 | Rename (in place) | Return |
 | Move to Trash | ⌘Delete |
 | Open the selected item | ⌘O |

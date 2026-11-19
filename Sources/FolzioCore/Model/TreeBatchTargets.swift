@@ -34,7 +34,7 @@ public struct TreeBatchTargets: Sendable, Equatable {
     }
 
     /// Whether the command acts on exactly one row. Commands that assume a single row (New Folder, rename, Copy as
-    /// Pathname, Add to Favorites, Remove from Favorites, Reveal in Finder, and paste) are available only in this case
+    /// Pathname, Add to Favorites, Remove from Favorites, and paste) are available only in this case
     /// (FR-218).
     public var isSingle: Bool { targets.count == 1 }
 
@@ -58,18 +58,28 @@ public struct TreeBatchTargets: Sendable, Equatable {
         regularFolderURLs(roots: roots)
     }
 
-    /// Context menu items for the targets. A single target uses the menu of its role. Multiple targets use the menu
-    /// of a regular folder regardless of their roles; the UI enables only Move to Trash (FR-218).
+    /// Real folders for copy and Reveal in Finder, including roots. Rejects virtual rows as a whole.
+    public var folderURLs: [URL]? {
+        guard !targets.isEmpty else { return nil }
+        var urls: [URL] = []
+        for target in targets {
+            guard case .folder(let url) = target else { return nil }
+            urls.append(url)
+        }
+        return urls
+    }
+
+    /// Duplicate protects the same roots and out-of-root targets as rename and Trash.
+    public func duplicateURLs(roots: [URL]) -> [URL]? {
+        regularFolderURLs(roots: roots)
+    }
+
+    /// Multiple targets use the same operation order; each action validates the entire target set.
     public func contextMenu(roots: [URL]) -> [TreeContextMenuItem] {
         if let single = singleTarget {
             return FavoriteCommands.contextMenu(for: single, roots: roots)
         }
-        guard isMultiple else { return [] }
-        return [
-            .newFolder, .separator,
-            .moveToTrash, .separator, .renameFolder, .separator,
-            .pasteHere, .movePasteHere, .separator, .addToFavorites, .separator, .copyPathname, .revealInFinder,
-        ]
+        return isMultiple ? FolderContextMenu.items(allowsModification: true) : []
     }
 
     /// Whether any URL equals another or is inside another. Compares path components of `standardizedFileURL` so

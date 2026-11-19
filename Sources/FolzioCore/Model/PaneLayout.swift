@@ -197,7 +197,17 @@ public struct PaneCommands: Sendable, Equatable {
 
     /// ⌃⌘T. Combined with the tree-side check using AND (FR-062, FR-092)
     public var allowsAddingFavorite: Bool {
-        !isEditingText && layout.isVisible(.tree)
+        allowsAddingFavorite(in: .tree)
+    }
+
+    public func allowsAddingFavorite(in pane: Pane) -> Bool {
+        pane != .preview && !isEditingText && layout.isVisible(pane)
+    }
+
+    /// File list focus uses its selection; preview or non-pane focus preserves the visible tree target.
+    public func favoriteTargetPane(focusedPane: Pane?) -> Pane? {
+        let target: Pane = focusedPane == .fileList ? .fileList : .tree
+        return allowsAddingFavorite(in: target) ? target : nil
     }
 
     /// ⌘F (FR-080, FR-092)

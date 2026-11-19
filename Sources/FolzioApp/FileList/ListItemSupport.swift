@@ -6,8 +6,12 @@ extension BrowserModel {
     /// level exists, and whether search results are shown. Menus, keys, and drags use the same decision
     /// (FR-069, 073, 077, 087; research.md R26, R30, R38).
     var focusedItemCommands: ListItemCommands {
+        itemCommands(kind: focusedKind)
+    }
+
+    func itemCommands(kind: ListItemKind?) -> ListItemCommands {
         ListItemCommands(
-            kind: focusedKind,
+            kind: kind,
             isBrowsingArchive: isBrowsingArchive,
             hasEnclosingLevel: hasEnclosingLevel,
             isShowingSearchResults: isShowingSearchResults
@@ -17,13 +21,7 @@ extension BrowserModel {
     /// Availability of file operations for the selection (copy, Trash, and so on). Because `operableSelection` excludes
     /// `..`, other selected rows can be operated on even when the focus is on `..` (R30).
     var selectionItemCommands: ListItemCommands {
-        let kind = focusedKind == .parent && !operableSelection.isEmpty ? nil : focusedKind
-        return ListItemCommands(
-            kind: kind,
-            isBrowsingArchive: isBrowsingArchive,
-            hasEnclosingLevel: hasEnclosingLevel,
-            isShowingSearchResults: isShowingSearchResults
-        )
+        focusedItemCommands.forSelection(hasOperableTargets: !operableSelection.isEmpty)
     }
 
     private var focusedKind: ListItemKind? {
@@ -36,12 +34,7 @@ extension BrowserModel {
     func itemCommands(forRowAt index: Int) -> ListItemCommands {
         let files = listing.files
         let kind = files.indices.contains(index) ? files[index].kind : nil
-        return ListItemCommands(
-            kind: kind,
-            isBrowsingArchive: isBrowsingArchive,
-            hasEnclosingLevel: hasEnclosingLevel,
-            isShowingSearchResults: isShowingSearchResults
-        )
+        return itemCommands(kind: kind)
     }
 }
 

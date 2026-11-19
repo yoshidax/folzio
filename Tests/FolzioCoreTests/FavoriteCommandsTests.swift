@@ -25,19 +25,10 @@ struct FavoriteCommandsTests {
         #expect(FavoriteCommands.removalTarget(nil) == nil)
     }
 
-    @Test("Context menu items and their order depend on the role")
+    @Test("Folders share the common operation order and virtual favorites retain their menu")
     func contextMenuItems() {
-        #expect(
-            FavoriteCommands.contextMenu(for: .folder(folder))
-                == [
-                    .newFolder, .separator,
-                    .pasteHere, .movePasteHere, .separator, .addToFavorites, .separator, .copyPathname, .revealInFinder,
-                ]
-        )
-        #expect(
-            FavoriteCommands.contextMenu(for: .favorite(registered))
-                == [.newFolder, .separator, .renameFavorite, .removeFromFavorites, .separator, .copyPathname]
-        )
+        #expect(FavoriteCommands.contextMenu(for: .folder(folder)) == FolderContextMenu.items(allowsModification: false))
+        #expect(FavoriteCommands.contextMenu(for: .favorite(registered)) == [.newFolder, .separator, .renameFavorite, .removeFromFavorites, .separator, .copyPathname])
         #expect(FavoriteCommands.contextMenu(for: .favoritesHeader).isEmpty)
     }
 
@@ -121,34 +112,12 @@ struct FavoriteCommandsTests {
         #expect(FavoriteCommands.trashTarget(.folder(a), roots: []) == nil)
     }
 
-    @Test("Regular folder context menus place Move to Trash and Rename before their respective separators (A-37)")
-    func contextMenuForOrdinaryFolderHasTrashAndRename() {
+    @Test("Only non-root folder menus offer Trash and Rename")
+    func contextMenuProtection() {
         let a = URL(fileURLWithPath: "/test-homes/me/a")
-        #expect(
-            FavoriteCommands.contextMenu(for: .folder(a), roots: roots)
-                == [
-                    .newFolder, .separator,
-                    .moveToTrash, .separator, .renameFolder, .separator,
-                    .pasteHere, .movePasteHere, .separator, .addToFavorites, .separator, .copyPathname, .revealInFinder,
-                ]
-        )
-    }
-
-    @Test("Root folders and omitted roots retain the existing order; passing roots leaves favorites and headings unchanged")
-    func contextMenuWithoutTrash() {
-        let plain: [TreeContextMenuItem] =
-            [
-                .newFolder, .separator,
-                .pasteHere, .movePasteHere, .separator, .addToFavorites, .separator, .copyPathname, .revealInFinder,
-            ]
-        let a = URL(fileURLWithPath: "/test-homes/me/a")
-        #expect(FavoriteCommands.contextMenu(for: .folder(URL(fileURLWithPath: "/test-homes/me")), roots: roots) == plain)
-        #expect(FavoriteCommands.contextMenu(for: .folder(a)) == plain)
-        #expect(
-            FavoriteCommands.contextMenu(for: .favorite(a), roots: roots)
-                == [.newFolder, .separator, .renameFavorite, .removeFromFavorites, .separator, .copyPathname]
-        )
-        #expect(FavoriteCommands.contextMenu(for: .favoritesHeader, roots: roots).isEmpty)
+        #expect(FavoriteCommands.contextMenu(for: .folder(a), roots: roots) == FolderContextMenu.items(allowsModification: true))
+        #expect(FavoriteCommands.contextMenu(for: .folder(roots[1]), roots: roots) == FolderContextMenu.items(allowsModification: false))
+        #expect(FavoriteCommands.contextMenu(for: .folder(a)) == FolderContextMenu.items(allowsModification: false))
     }
     // MARK: New folder (FR-208)
 
@@ -162,15 +131,9 @@ struct FavoriteCommandsTests {
         #expect(FavoriteCommands.newFolderTarget(nil) == nil)
     }
 
-    @Test("New Folder comes first, followed by a separator, in folder, root, and favorite menus only (FR-208)")
-    func newFolderLeadsContextMenus() {
-        let a = URL(fileURLWithPath: "/test-homes/me/a")
-        let root = URL(fileURLWithPath: "/test-homes/me")
-        for role in [TreeItemRole.folder(a), .folder(root), .favorite(registered)] {
-            let items = FavoriteCommands.contextMenu(for: role, roots: roots)
-            #expect(Array(items.prefix(2)) == [.newFolder, .separator])
-            #expect(items.filter { $0 == .newFolder }.count == 1)
-        }
-        #expect(!FavoriteCommands.contextMenu(for: .favoritesHeader, roots: roots).contains(.newFolder))
+    @Test("New Folder is retained only for virtual favorite menus")
+    func newFolderMenuScope() {
+        #expect(!FavoriteCommands.contextMenu(for: .folder(folder), roots: roots).contains(.newFolder))
+        #expect(FavoriteCommands.contextMenu(for: .favorite(registered)).first == .newFolder)
     }
 }

@@ -13,7 +13,6 @@ struct ListItemCommandsTests {
         #expect(commands.canOpenContainer == false)
         #expect(commands.canGoUp == false)
         #expect(commands.allowsFileOperations == true)
-        #expect(commands.allowsPaste == true)
     }
 
     @Test("Videos outside a zip behave the same as images")
@@ -22,7 +21,6 @@ struct ListItemCommandsTests {
         #expect(commands.canOpenContainer == false)
         #expect(commands.canGoUp == false)
         #expect(commands.allowsFileOperations == true)
-        #expect(commands.allowsPaste == true)
     }
 
     @Test("Zip files outside a zip can be entered and support all operations")
@@ -31,16 +29,14 @@ struct ListItemCommandsTests {
         #expect(commands.canOpenContainer == true)
         #expect(commands.canGoUp == false)
         #expect(commands.allowsFileOperations == true)
-        #expect(commands.allowsPaste == true)
     }
 
-    @Test("Without a selected row outside a zip, file operations and paste are enabled but entry is disabled")
+    @Test("Without a selected row outside a zip, file operations are enabled but entry is disabled")
     func noFocusOutsideArchive() {
         let commands = ListItemCommands(kind: nil, isBrowsingArchive: false)
         #expect(commands.canOpenContainer == false)
         #expect(commands.canGoUp == false)
         #expect(commands.allowsFileOperations == true)
-        #expect(commands.allowsPaste == true)
     }
 
     @Test("canGoUp is false for every row kind outside a zip")
@@ -55,16 +51,28 @@ struct ListItemCommandsTests {
         let commands = ListItemCommands(kind: .folder, isBrowsingArchive: false)
         #expect(commands.canOpenContainer == true)
         #expect(commands.allowsFileOperations == true)
-        #expect(commands.allowsPaste == true)
     }
 
-    @Test("The .. row in a regular folder opens but cannot be operated on; paste targets the current folder")
+    @Test("The .. row in a regular folder opens but cannot be operated on")
     func parentOutsideArchive() {
         let commands = ListItemCommands(kind: .parent, isBrowsingArchive: false, hasEnclosingLevel: true)
         #expect(commands.canOpenContainer == true)
         #expect(commands.canGoUp == true)
         #expect(commands.allowsFileOperations == false)
-        #expect(commands.allowsPaste == true)
+    }
+
+    @Test("Parent focus permits other selection targets while preserving archive and search restrictions")
+    func parentWithOtherTargets() {
+        for archive in [false, true] {
+            for search in [false, true] {
+                let focused = ListItemCommands(kind: .parent, isBrowsingArchive: archive,
+                    hasEnclosingLevel: true, isShowingSearchResults: search)
+                #expect(!focused.forSelection(hasOperableTargets: false).allowsFileOperations)
+                let selection = focused.forSelection(hasOperableTargets: true)
+                #expect(selection.allowsFileOperations == !archive)
+                #expect(selection.canGoUp == !search)
+            }
+        }
     }
 
     @Test("Omitting hasEnclosingLevel makes canGoUp equal isBrowsingArchive")
@@ -88,14 +96,13 @@ struct ListItemCommandsTests {
 
     // MARK: - Inside a Zip
 
-    @Test("Media inside a zip cannot be entered, allows going up, and disables file operations and paste")
+    @Test("Media inside a zip cannot be entered, allows going up, and disables file operations")
     func mediaInsideArchive() {
         for kind in [ListItemKind.media(.png), .media(.mp4)] {
             let commands = ListItemCommands(kind: kind, isBrowsingArchive: true)
             #expect(commands.canOpenContainer == false, "kind=\(kind)")
             #expect(commands.canGoUp == true, "kind=\(kind)")
             #expect(commands.allowsFileOperations == false, "kind=\(kind)")
-            #expect(commands.allowsPaste == false, "kind=\(kind)")
         }
     }
 
@@ -105,7 +112,6 @@ struct ListItemCommandsTests {
         #expect(commands.canOpenContainer == true)
         #expect(commands.canGoUp == true)
         #expect(commands.allowsFileOperations == false)
-        #expect(commands.allowsPaste == false)
     }
 
     @Test("The .. row inside a zip allows going up")
@@ -114,7 +120,6 @@ struct ListItemCommandsTests {
         #expect(commands.canOpenContainer == true)
         #expect(commands.canGoUp == true)
         #expect(commands.allowsFileOperations == false)
-        #expect(commands.allowsPaste == false)
     }
 
     @Test("Without a selected row inside a zip, going up is enabled but entry and operations are disabled")
@@ -123,7 +128,6 @@ struct ListItemCommandsTests {
         #expect(commands.canOpenContainer == false)
         #expect(commands.canGoUp == true)
         #expect(commands.allowsFileOperations == false)
-        #expect(commands.allowsPaste == false)
     }
 
     @Test("Every row kind inside a zip is read-only and allows going up")
@@ -132,14 +136,13 @@ struct ListItemCommandsTests {
         for kind in kinds {
             let commands = ListItemCommands(kind: kind, isBrowsingArchive: true)
             #expect(commands.allowsFileOperations == false, "kind=\(String(describing: kind))")
-            #expect(commands.allowsPaste == false, "kind=\(String(describing: kind))")
             #expect(commands.canGoUp == true, "kind=\(String(describing: kind))")
         }
     }
 
     // MARK: - Search Results (FR-087)
 
-    @Test("Search results disable paste and going up; other file operations match regular folders")
+    @Test("Search results disable going up; other file operations match regular folders")
     func searchResults() {
         let commands = ListItemCommands(
             kind: .media(.jpeg),
@@ -147,13 +150,12 @@ struct ListItemCommandsTests {
             hasEnclosingLevel: true,
             isShowingSearchResults: true
         )
-        #expect(commands.allowsPaste == false)
         #expect(commands.canGoUp == false)
         #expect(commands.allowsFileOperations == true)
         #expect(commands.canOpenContainer == false)
 
         let noFocus = ListItemCommands(kind: nil, isBrowsingArchive: false, isShowingSearchResults: true)
-        #expect(noFocus.allowsPaste == false)
+        #expect(noFocus.canGoUp == false)
     }
 
     @Test("Omitting isShowingSearchResults preserves existing results")
@@ -171,7 +173,6 @@ struct ListItemCommandsTests {
                     )
                     #expect(omitted == explicit)
                     #expect(omitted.canGoUp == enclosing)
-                    #expect(omitted.allowsPaste == !archive)
                 }
             }
         }

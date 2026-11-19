@@ -6,6 +6,57 @@ import Testing
 struct SettingsStoreTests {
     static let confirmationOff = ConfirmationOptions(copy: false, move: false, rename: false, removeFavorite: false, trash: false)
 
+    @Test("Favorites expansion defaults closed and rejects non-Boolean values")
+    func favoritesExpansionDefaults() {
+        withDefaults { defaults in
+            let store = SettingsStore(defaults: defaults)
+            #expect(!store.restoresFavoritesExpansion)
+            #expect(!store.favoritesExpanded)
+            #expect(!store.favoritesExpandedOnLaunch)
+            for invalid in [0, 1, 42, 0.5, "true", "YES", [], ["value": true]] as [Any] {
+                defaults.set(invalid, forKey: "favorites.restoreExpansion")
+                defaults.set(invalid, forKey: "favorites.isExpanded")
+                #expect(!store.restoresFavoritesExpansion)
+                #expect(!store.favoritesExpanded)
+                #expect(!store.favoritesExpandedOnLaunch)
+            }
+        }
+    }
+
+    @Test("Favorites expansion round-trips independently of registration and other settings")
+    func favoritesExpansionRoundTrips() {
+        withDefaults { defaults in
+            let store = SettingsStore(defaults: defaults)
+            let folder = URL(fileURLWithPath: "/tmp/fav/a", isDirectory: true)
+            let favorites = FavoriteFolders(urls: [folder], customNames: [folder.path: "Photos"])
+            store.favorites = favorites
+            store.playback = PlaybackOptions(autoplay: false, loop: false)
+            for restores in [false, true] {
+                for expanded in [false, true] {
+                    store.restoresFavoritesExpansion = restores
+                    store.favoritesExpanded = expanded
+                    let reloaded = SettingsStore(defaults: defaults)
+                    #expect(reloaded.restoresFavoritesExpansion == restores)
+                    #expect(reloaded.favoritesExpanded == expanded)
+                    #expect(reloaded.favoritesExpandedOnLaunch == (restores && expanded))
+                    #expect(reloaded.favorites == favorites)
+                    #expect(reloaded.playback == PlaybackOptions(autoplay: false, loop: false))
+                    #expect(defaults.object(forKey: "favorites.restoreExpansion") as? Bool == restores)
+                    #expect(defaults.object(forKey: "favorites.isExpanded") as? Bool == expanded)
+                }
+            }
+            store.restoresFavoritesExpansion = true
+            store.favoritesExpanded = true
+            store.restoresFavoritesExpansion = false
+            #expect(store.favoritesExpanded)
+            store.restoresFavoritesExpansion = true
+            #expect(store.favoritesExpandedOnLaunch)
+            store.favorites = FavoriteFolders()
+            #expect(store.restoresFavoritesExpansion)
+            #expect(store.favoritesExpanded)
+        }
+    }
+
     @Test("Preview mode defaults safely and preserves the selected value")
     func previewInteractionMode() {
         withDefaults { defaults in

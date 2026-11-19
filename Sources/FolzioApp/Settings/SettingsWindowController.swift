@@ -62,7 +62,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
     }
 
     private let store: SettingsStore
-    /// The General tab: the settings that existed before the Shortcuts tab. Its layout is unchanged (FR-255).
+    /// Viewing and file-operation settings in the General tab.
     private var generalView = NSView()
     private let shortcutsView = ShortcutSettingsView(frame: .zero)
     private let tabSelector = NSSegmentedControl()
@@ -78,6 +78,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
     private let previewHeader = NSTextField(labelWithString: "")
     private let previewModeLabel = NSTextField(labelWithString: "")
     private let previewModePopup = KeyViewPopUpButton(frame: .zero, pullsDown: false)
+    private let favoritesHeader = NSTextField(labelWithString: "")
+    private let restoreFavoritesCheckbox = WrappingCheckbox(checkboxWithTitle: "", target: nil, action: nil)
     private let videoHeader = NSTextField(labelWithString: "")
     private let fileOperationsHeader = NSTextField(labelWithString: "")
     private let slideshowHeader = NSTextField(labelWithString: "")
@@ -139,7 +141,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         window.contentView = makeRootView()
         window.autorecalculatesKeyViewLoop = false
         languagePopup.nextKeyView = previewModePopup
-        previewModePopup.nextKeyView = autoplayCheckbox
+        previewModePopup.nextKeyView = restoreFavoritesCheckbox
+        restoreFavoritesCheckbox.nextKeyView = autoplayCheckbox
         autoplayCheckbox.nextKeyView = loopCheckbox
         // Loop → each confirmation in the Settings window order → interval (US40-AS4).
         var previousKeyView: NSView = loopCheckbox
@@ -161,6 +164,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         autoplayCheckbox.action = #selector(toggleAutoplay(_:))
         loopCheckbox.target = self
         loopCheckbox.action = #selector(toggleLoop(_:))
+        restoreFavoritesCheckbox.target = self
+        restoreFavoritesCheckbox.action = #selector(toggleFavoritesRestoration(_:))
         for checkbox in orderedConfirmationCheckboxes {
             checkbox.target = self
             checkbox.action = #selector(toggleConfirmation(_:))
@@ -234,6 +239,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         )
 
         previewHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        favoritesHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
         videoHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
 
         fileOperationsHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
@@ -264,7 +270,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         transitionRow.alignment = .firstBaseline
         transitionRow.spacing = 8
 
-        for checkbox in orderedConfirmationCheckboxes {
+        for checkbox in orderedConfirmationCheckboxes + [restoreFavoritesCheckbox] {
             checkbox.cell?.wraps = true
             checkbox.cell?.isScrollable = false
             checkbox.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -274,6 +280,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
             languageRow,
             previewHeader,
             previewRow,
+            favoritesHeader,
+            restoreFavoritesCheckbox,
             videoHeader,
             autoplayCheckbox,
             loopCheckbox,
@@ -289,6 +297,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         stack.spacing = Self.itemSpacing
         stack.setCustomSpacing(Self.sectionSpacing, after: languageRow)
         stack.setCustomSpacing(Self.sectionSpacing, after: previewRow)
+        stack.setCustomSpacing(Self.sectionSpacing, after: restoreFavoritesCheckbox)
         stack.setCustomSpacing(Self.sectionSpacing, after: loopCheckbox)
         // No operation always confirms, so the checkboxes have no supplementary note (FR-223).
         if let last = orderedConfirmationCheckboxes.last {
@@ -303,7 +312,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
             stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Self.margin),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -Self.margin),
             intervalField.widthAnchor.constraint(equalToConstant: 80),
-        ] + orderedConfirmationCheckboxes.map { $0.widthAnchor.constraint(equalTo: stack.widthAnchor) })
+        ] + (orderedConfirmationCheckboxes + [restoreFavoritesCheckbox]).map {
+            $0.widthAnchor.constraint(equalTo: stack.widthAnchor)
+        })
 
         return contentView
     }
@@ -395,6 +406,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
     }
 
     private func syncFromStore() {
+        restoreFavoritesCheckbox.state = store.restoresFavoritesExpansion ? .on : .off
         if let item = previewModePopup.itemArray.first(where: {
             $0.representedObject as? String == store.previewInteractionMode.rawValue
         }) { previewModePopup.select(item) }
@@ -435,6 +447,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         previewModePopup.setAccessibilityLabel(l10n.text(.settingsPreviewInteraction))
         previewModePopup.item(at: 0)?.title = l10n.text(.settingsPreviewWheelPan)
         previewModePopup.item(at: 1)?.title = l10n.text(.settingsPreviewScroll)
+        favoritesHeader.stringValue = l10n.text(.settingsFavorites)
+        restoreFavoritesCheckbox.title = l10n.text(.settingsRestoreFavoritesExpansion)
+        restoreFavoritesCheckbox.setAccessibilityLabel(l10n.text(.settingsRestoreFavoritesExpansion))
         videoHeader.stringValue = l10n.text(.settingsVideo)
         fileOperationsHeader.stringValue = l10n.text(.settingsFileOperations)
         slideshowHeader.stringValue = l10n.text(.settingsSlideshow)
@@ -455,6 +470,10 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
             transitionPopup.item(at: index)?.title = l10n.text(key)
         }
         resizeToFitContent()
+    }
+
+    @objc private func toggleFavoritesRestoration(_ sender: NSButton) {
+        store.restoresFavoritesExpansion = sender.state == .on
     }
 
     @objc private func selectPreviewMode(_ sender: NSPopUpButton) {

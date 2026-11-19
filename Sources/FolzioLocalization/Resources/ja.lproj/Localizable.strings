@@ -865,7 +865,7 @@
 "shortcuts.entry.addFavorite" = "選択フォルダをお気に入りへ追加する";
 
 /* Availability note below a shortcut reference action */
-"shortcuts.condition.addFavorite" = "登録済み・お気に入りの項目・見出し・名前の編集中・ツリー非表示中は使えません。";
+"shortcuts.condition.addFavorite" = "ファイルリストにフォーカスがあるときはリストのフォルダ1件、それ以外はツリーの選択が対象です。登録済み・複数・お気に入りの項目・見出し・名前の編集中・文字入力中・対象のペインが非表示のときは使えません。";
 
 /* Action description in the shortcut reference */
 "shortcuts.entry.selection" = "選択を移動する";
@@ -898,10 +898,10 @@
 "shortcuts.condition.rename" = "Returnで確定、Escで取り消します。ツリーではお気に入りの表示名・通常フォルダの実名を変更します。リストのzip内では使えません。";
 
 /* Action description in the shortcut reference */
-"shortcuts.entry.copy" = "選択したファイルをコピーする";
+"shortcuts.entry.copy" = "選択項目をコピーする";
 
 /* Availability note below a shortcut reference action */
-"shortcuts.condition.copy" = "ファイルリストで使えます。zipの中では使えません。";
+"shortcuts.condition.copy" = "ファイルリストとツリーのフォルダで使えます。zipの中では使えません。";
 
 /* Action description in the shortcut reference */
 "shortcuts.entry.paste" = "ペースト・移動ペーストする";
@@ -919,7 +919,7 @@
 "shortcuts.entry.duplicate" = "選択項目を複製する";
 
 /* Availability note below a shortcut reference action */
-"shortcuts.condition.duplicate" = "ファイルリストで使えます。zipの中では使えません。";
+"shortcuts.condition.duplicate" = "ファイルリストとツリーのフォルダで使えます。ルート・zipの中では使えません。";
 
 /* Action description in the shortcut reference */
 "shortcuts.entry.newFolder" = "新規フォルダを作る";
@@ -1069,3 +1069,5 @@
 "settings.preview.interaction" = "画像の操作";
 "settings.preview.wheelPan" = "ホイールズームとドラッグ";
 "settings.preview.scroll" = "スクロール";
+"settings.favorites" = "お気に入り";
+"settings.favorites.restoreExpansion" = "起動時に前回の開閉状態を復元する";

@@ -4,6 +4,19 @@ import Foundation
 /// location stay hidden (EC-236). A whole folder moved away hides its other files that have not arrived yet, the same
 /// as a move inside the app (`BrowserModel.didMoveSearchItems`).
 enum SearchRemovalScope {
+    /// Matches a removed path or its descendants without scanning every scope for each candidate.
+    /// `paths` contains standardized file URL paths, as recorded by search removal and post-trash selection.
+    static func contains(_ url: URL, in paths: Set<String>) -> Bool {
+        let path = url.standardizedFileURL.path
+        var prefix = path[...]
+        while !prefix.isEmpty {
+            if paths.contains(String(prefix)) { return true }
+            guard let slash = prefix.lastIndex(of: "/") else { break }
+            prefix = prefix[..<slash]
+        }
+        return paths.contains("/")
+    }
+
     /// The topmost missing item on the way from `url` up to the search root: the missing ancestor whose parent still
     /// exists, the root itself when the root is gone, or `url` when only that item is gone. Never goes above `root`.
     /// - Parameters:

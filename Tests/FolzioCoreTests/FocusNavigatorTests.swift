@@ -131,6 +131,21 @@ struct FocusNavigatorTests {
         ) == 0)
     }
 
+    @Test("An empty file-list selection enters at the last row with Up and first with Down", arguments: [0, 1, 5])
+    func emptySelectionEntry(_ count: Int) {
+        #expect(FocusNavigator.emptySelectionIndex(fileCount: count, move: .up) == (count > 0 ? count - 1 : nil))
+        #expect(FocusNavigator.emptySelectionIndex(fileCount: count, move: .down) == (count > 0 ? 0 : nil))
+        #expect(FocusNavigator.emptySelectionIndex(fileCount: count, move: .left) == nil)
+        #expect(FocusNavigator.emptySelectionIndex(fileCount: count, move: .right) == nil)
+    }
+
+    @Test("Existing generic and preview navigation still enter at the first eligible row")
+    func previewEntryUnchanged() {
+        #expect(FocusNavigator.targetIndex(currentIndex: nil, fileCount: 4, move: .up, layout: .grid(columns: 2)) == 0)
+        #expect(FocusNavigator.targetIndex(currentIndex: nil, fileCount: 4, move: .up, layout: .grid(columns: 2),
+            isNavigable: { $0 > 0 }) == 1)
+    }
+
     @Test("An empty list has no destination")
     func emptyListReturnsNil() {
         #expect(FocusNavigator.targetIndex(

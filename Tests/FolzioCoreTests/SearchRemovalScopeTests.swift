@@ -6,6 +6,17 @@ import Testing
 struct SearchRemovalScopeTests {
     private let root = URL(fileURLWithPath: "/search/root", isDirectory: true)
 
+    @Test("Removed scopes match whole path components, standardized paths, and the root")
+    func matchingScopes() {
+        let scope = URL(fileURLWithPath: "/search/root/trip/", isDirectory: true).standardizedFileURL.path
+        #expect(SearchRemovalScope.contains(URL(fileURLWithPath: "/search/root/trip"), in: [scope]))
+        #expect(SearchRemovalScope.contains(URL(fileURLWithPath: "/search/root/trip/day/../a.jpg"), in: [scope]))
+        #expect(!SearchRemovalScope.contains(URL(fileURLWithPath: "/search/root/trip2/a.jpg"), in: [scope]))
+        #expect(SearchRemovalScope.contains(root, in: ["/"]))
+        #expect(SearchRemovalScope.contains(URL(fileURLWithPath: "/"), in: ["/"]))
+        #expect(!SearchRemovalScope.contains(root, in: []))
+    }
+
     /// Runs the lookup against a fake file system that contains only `existing`, and counts the existence checks.
     private func topmost(
         _ path: String,

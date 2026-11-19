@@ -4,6 +4,12 @@ import AppKit
 /// same way, and other URLs and strings are ignored (FR-348).
 @MainActor
 enum PasteboardFileURLs {
+    /// Replaces pasteboard contents with the complete set of file operation targets.
+    static func write(_ urls: [URL], to pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+        pasteboard.writeObjects(urls as [NSURL])
+    }
+
     /// The file URLs on `pasteboard`, or an empty array when it has none.
     static func fileURLs(in pasteboard: NSPasteboard) -> [URL] {
         let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]

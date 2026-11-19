@@ -13,6 +13,17 @@ public enum FocusLayout: Sendable {
 }
 
 public struct FocusNavigator {
+    /// Enters an unselected file list at its last row with Up or its first row with Down.
+    /// Horizontal keys and preview navigation keep their existing entry rules.
+    public static func emptySelectionIndex(fileCount: Int, move: FocusMove) -> Int? {
+        guard fileCount > 0 else { return nil }
+        switch move {
+        case .up: return fileCount - 1
+        case .down: return 0
+        case .left, .right: return nil
+        }
+    }
+
     public static func targetIndex(
         currentIndex: Int?,
         fileCount: Int,

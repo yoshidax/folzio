@@ -4,6 +4,16 @@ import Testing
 
 @Suite("Settings Window Text")
 struct SettingsTextTests {
+    @Test("Favorites restoration is described in both languages")
+    func favoritesRestoration() {
+        let ja = LocalizationTestSupport.localizer("ja")
+        let en = LocalizationTestSupport.localizer("en")
+        #expect(ja.text(.settingsFavorites) == "お気に入り")
+        #expect(ja.text(.settingsRestoreFavoritesExpansion) == "起動時に前回の開閉状態を復元する")
+        #expect(en.text(.settingsFavorites) == "Favorites")
+        #expect(en.text(.settingsRestoreFavoritesExpansion) == "Restore previous expansion state on launch")
+    }
+
     @Test("Preview interaction options are available in both languages")
     func previewInteractionOptions() {
         let ja = LocalizationTestSupport.localizer("ja")

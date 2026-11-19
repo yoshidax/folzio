@@ -33,6 +33,8 @@ public struct SettingsStore {
         static func confirm(_ target: ConfirmationTarget) -> String { "fileOps.confirm.\(target.rawValue)" }
         static let favoritePaths = "favorites.paths"
         static let favoriteDisplayNames = "favorites.displayNames"
+        static let restoresFavoritesExpansion = "favorites.restoreExpansion"
+        static let favoritesExpanded = "favorites.isExpanded"
         static let slideshowIntervalSeconds = "slideshow.intervalSeconds"
         static let slideshowRepeats = "slideshow.repeats"
         static let slideshowTransition = "slideshow.transition"
@@ -245,6 +247,30 @@ public struct SettingsStore {
                 defaults.set(newValue.customNamesByPath, forKey: Keys.favoriteDisplayNames)
             }
         }
+    }
+
+    /// Whether to restore the Favorites heading on the next launch. Changing this does not change the current tree.
+    public var restoresFavoritesExpansion: Bool {
+        get { storedStrictBool(forKey: Keys.restoresFavoritesExpansion) ?? false }
+        nonmutating set { defaults.set(newValue, forKey: Keys.restoresFavoritesExpansion) }
+    }
+
+    /// The last displayed expansion state, saved even when restoration is disabled.
+    public var favoritesExpanded: Bool {
+        get { storedStrictBool(forKey: Keys.favoritesExpanded) ?? false }
+        nonmutating set { defaults.set(newValue, forKey: Keys.favoritesExpanded) }
+    }
+
+    public var favoritesExpandedOnLaunch: Bool {
+        restoresFavoritesExpansion && favoritesExpanded
+    }
+
+    /// The new Favorites expansion keys reject numbers; existing keys retain their previous Boolean coercion
+    /// through storedBool for compatibility with previously accepted settings.
+    private func storedStrictBool(forKey key: String) -> Bool? {
+        guard let value = defaults.object(forKey: key) as? NSNumber,
+              CFGetTypeID(value) == CFBooleanGetTypeID() else { return nil }
+        return value.boolValue
     }
 
     private func storedBool(forKey key: String) -> Bool? {

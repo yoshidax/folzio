@@ -8,6 +8,7 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
 
     private weak var host: FileListViewController?
     private let copyItem = NSMenuItem()
+    private let addFavoriteItem = NSMenuItem()
     private let pasteItem = NSMenuItem()
     private let movePasteItem = NSMenuItem()
     private let openContainerItem = NSMenuItem()
@@ -20,7 +21,6 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
     private var itemMenuItems: [NSMenuItem] = []
     /// Items for a context click on the background, targeting the displayed folder (FR-213).
     private var backgroundMenuItems: [NSMenuItem] = []
-    private var showsBackgroundItems: Bool?
 
     init(host: FileListViewController) {
         self.host = host
@@ -41,18 +41,37 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         // A click on an unselected item targets only that item, without changing the selection, like the tree
         // (FR-397, A-21). Item titles and availability below follow the recorded target.
         host?.recordContextMenuTarget(clickedIndex: host?.contextClickedIndex)
-        // A click on the background shows the displayed folder's menu instead of the selection's (FR-213, R7).
-        let isBackground = host?.isContextClickOnBackground ?? false
-        if showsBackgroundItems != isBackground {
-            showsBackgroundItems = isBackground
-            menu.removeAllItems()
-            for item in isBackground ? backgroundMenuItems : itemMenuItems {
-                menu.addItem(item)
+        refreshItems()
+    }
+
+    /// Rebuilds from the recorded target, retaining the same menu items and shortcut registrations.
+    func refreshItems() {
+        let isBackground = host?.contextMenuIsBackground ?? false
+        let policy = host?.contextMenuFolderPolicy
+        let items: [NSMenuItem]
+        if isBackground {
+            items = backgroundMenuItems
+        } else if let policy, policy.onlyFolders {
+            let folderItems = FolderContextMenu.items(
+                allowsModification: policy.items.count > 1 || !policy.containsProtectedFolder
+            ).compactMap { self.folderItem($0) }
+            items = [openContainerItem, goUpItem, .separator()]
+                + folderItems
+        } else {
+            items = itemMenuItems.filter { item in
+                !(policy?.containsFolder == true &&
+                    (item === openWithItem || item.action == #selector(FileListViewController.open(_:))))
             }
         }
+        menu.removeAllItems()
+        for item in items { menu.addItem(item) }
         MainMenu.refreshTitles(in: menu)
-        if !isBackground {
+        if !isBackground && policy?.containsFolder != true {
             host?.updateOpenWithMenu(openWithItem)
+        }
+        if !isBackground && policy?.onlyFolders == true {
+            pasteItem.title = l10n.text(.contextPasteHere)
+            movePasteItem.title = l10n.text(.contextMovePasteHere)
         }
         let urls = host?.operationTarget(for: copyItem).urls ?? []
         if urls.count == 1, let name = urls.first?.lastPathComponent {
@@ -68,7 +87,7 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         goUpItem.isHidden = !(host?.focusedItemCommands.canGoUp ?? false)
 
         // Paste and Move Item Here are unavailable inside a zip (FR-073).
-        let allowsPaste = host?.focusedItemCommands.allowsPaste ?? true
+        let allowsPaste = host?.pasteDestination(for: pasteItem) != nil
         let available = PasteboardImport.availability()
         pasteItem.isEnabled = allowsPaste && available.allowsPaste(move: false)
         movePasteItem.isEnabled = allowsPaste && available.allowsPaste(move: true)
@@ -176,6 +195,11 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
             modifiers: [.command]
         )
         itemMenuItems = menu.items
+        addFavoriteItem.title = l10n.text(.menuFileAddToFavorites)
+        MainMenu.bind(addFavoriteItem, .menuFileAddToFavorites)
+        addFavoriteItem.action = #selector(FileListViewController.addToFavorites(_:))
+        addFavoriteItem.target = host
+        MenuShortcutApplier.shared.register(addFavoriteItem, for: .addToFavorites)
 
         newFolderItem.title = l10n.text(.menuFileNewFolder)
         MainMenu.bind(newFolderItem, .menuFileNewFolder)
@@ -194,7 +218,24 @@ final class FileContextMenu: NSObject, NSMenuDelegate {
         backgroundMenuItems = [
             newFolderItem, .separator(), pasteItem, movePasteItem, .separator(), revealFolderItem,
         ]
-        showsBackgroundItems = false
+    }
+
+    private func folderItem(_ action: TreeContextMenuItem) -> NSMenuItem? {
+        let selector: Selector
+        switch action {
+        case .pasteHere: return pasteItem
+        case .movePasteHere: return movePasteItem
+        case .copy: return copyItem
+        case .copyPathname: return copyPathnameItem
+        case .addToFavorites: return addFavoriteItem
+        case .separator: return .separator()
+        case .moveToTrash: selector = #selector(FileListViewController.moveToTrash(_:))
+        case .renameFolder: selector = #selector(FileListViewController.rename(_:))
+        case .duplicate: selector = #selector(FileListViewController.duplicate(_:))
+        case .revealInFinder: selector = #selector(FileListViewController.revealInFinder(_:))
+        case .newFolder, .renameFavorite, .removeFromFavorites: return nil
+        }
+        return itemMenuItems.first { $0.action == selector }
     }
 
     private func addItem(

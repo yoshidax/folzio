@@ -10,6 +10,7 @@ public enum TreeItemRole: Sendable, Equatable {
 
 public enum TreeContextMenuItem: Sendable, Equatable {
     case pasteHere, movePasteHere, addToFavorites, revealInFinder, removeFromFavorites
+    case copy, duplicate
     /// Copies the absolute path of the row as a string (FR-182)
     case copyPathname
     /// Moves a tree folder to the Trash (FR-079)
@@ -91,19 +92,11 @@ public enum FavoriteCommands {
         }
     }
 
-    /// Context menu items and their order. `.favoritesHeader` returns an empty array (no menu).
-    /// Folder and favorite menus start with `.newFolder` and a separator, as in Finder (FR-208).
-    /// For rows where `trashTarget` returns a URL, places `.moveToTrash` and `.renameFolder` next, each followed by
-    /// a separator (A-37). The default value of `roots` is empty, which omits `.moveToTrash` and `.renameFolder`.
+    /// Ordinary folders use the common file operations; virtual favorites keep their registration menu.
     public static func contextMenu(for role: TreeItemRole, roots: [URL] = []) -> [TreeContextMenuItem] {
         switch role {
         case .folder:
-            let items: [TreeContextMenuItem] =
-                [.pasteHere, .movePasteHere, .separator, .addToFavorites, .separator, .copyPathname, .revealInFinder]
-            let newFolder: [TreeContextMenuItem] = [.newFolder, .separator]
-            return trashTarget(role, roots: roots) != nil
-                ? newFolder + [.moveToTrash, .separator, .renameFolder, .separator] + items
-                : newFolder + items
+            return FolderContextMenu.items(allowsModification: trashTarget(role, roots: roots) != nil)
         case .favorite:
             return [.newFolder, .separator, .renameFavorite, .removeFromFavorites, .separator, .copyPathname]
         case .favoritesHeader:
