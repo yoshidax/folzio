@@ -53,7 +53,7 @@ private final class FileListTableView: NSTableView {
 
 @MainActor
 private final class FileListIconCell: NSTableCellView {
-    let iconView = NSImageView()
+    let iconView = VideoBadgeImageView()
     let nameField = NSTextField(labelWithString: "")
     var iconTask: Task<Void, Never>?
     var representedURL: URL?
@@ -68,6 +68,7 @@ private final class FileListIconCell: NSTableCellView {
 
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.imageScaling = .scaleProportionallyDown
+        iconView.badgeMetrics = VideoBadgeLayout.listIcon
         iconView.setAccessibilityElement(false)
         addSubview(iconView)
         imageView = iconView
@@ -814,6 +815,14 @@ extension ListModeView: NSTableViewDelegate {
         return cell
     }
 
+    /// Wraps a generated thumbnail as the leading icon, fitted into a square of `pointSize` with its aspect ratio
+    /// kept (FR-048). The image view centers it, and the video badge follows the drawn frame (FR-418).
+    static func listIconImage(from image: CGImage, pointSize: Double) -> NSImage {
+        let square = CGSize(width: pointSize, height: pointSize)
+        let fitted = FitCalculator.fit(imageSize: CGSize(width: image.width, height: image.height), in: square)
+        return NSImage(cgImage: image, size: fitted.isEmpty ? square : fitted.size)
+    }
+
     private func nameCell(
         for file: MediaFile,
         identifier: NSUserInterfaceItemIdentifier,
@@ -835,6 +844,7 @@ extension ListModeView: NSTableViewDelegate {
             cell.iconScale = 0
             cell.representedURL = file.url
             cell.representedVersion = nil
+            cell.iconView.showsVideoBadge = false
             cell.iconView.image = IconCatalog.listItemIcon(for: file.kind, pointSize: 16)
             cell.iconView.contentTintColor = IconCatalog.tintColor(for: file.kind)
             if renamingURL != file.url {
@@ -856,6 +866,8 @@ extension ListModeView: NSTableViewDelegate {
             cell.cancelIconRequest(using: provider)
             cell.representedURL = file.url
             cell.representedVersion = file.contentVersion
+            // The generic icon already shows the format, so no badge until the frame arrives (FR-418).
+            cell.iconView.showsVideoBadge = false
             cell.iconView.image = file.kind.mediaKind.flatMap { IconCatalog.fallbackIcon(for: $0) }
 
             let scale = Double(
@@ -870,6 +882,7 @@ extension ListModeView: NSTableViewDelegate {
             let provider = self.provider
             let url = file.url
             let version = file.contentVersion
+            let showsBadge = VideoBadgeLayout.isShown(kind: file.kind, showingRepresentativeFrame: true)
             cell.iconTask = Task { [weak cell] in
                 let image = await provider.thumbnail(
                     for: url,
@@ -884,10 +897,8 @@ extension ListModeView: NSTableViewDelegate {
                       let image else {
                     return
                 }
-                cell.iconView.image = NSImage(
-                    cgImage: image,
-                    size: NSSize(width: 16, height: 16)
-                )
+                cell.iconView.image = Self.listIconImage(from: image, pointSize: pointSize)
+                cell.iconView.showsVideoBadge = showsBadge
             }
         }
 

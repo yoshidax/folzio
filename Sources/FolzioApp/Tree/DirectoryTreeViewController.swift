@@ -1052,12 +1052,16 @@ final class DirectoryTreeViewController: NSViewController {
     }
 
     @objc func copy(_ sender: Any?) {
-        copyFolders(sender, to: .general)
+        Task { @MainActor in
+            await copyFolders(sender, to: .general)
+        }
     }
 
-    func copyFolders(_ sender: Any?, to pasteboard: NSPasteboard) {
+    /// Copies the target folders as file references (FR-413). Reads the targets before suspending, so a later change
+    /// of the selection does not retarget the copy.
+    func copyFolders(_ sender: Any?, to pasteboard: NSPasteboard) async {
         guard editingTarget == nil, let urls = batchTargets(for: sender).folderURLs else { return }
-        PasteboardFileURLs.write(urls, to: pasteboard)
+        await PasteboardFileURLs.copy(urls, to: pasteboard)
     }
 
     @objc func duplicate(_ sender: Any?) {

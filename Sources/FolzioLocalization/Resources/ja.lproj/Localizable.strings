@@ -725,6 +725,9 @@
 /* Accessibility label for a thumbnail image */
 "a11y.thumbnail" = "サムネイル";
 
+/* Accessibility label for a video thumbnail image */
+"a11y.videoThumbnail" = "動画のサムネイル";
+
 /* Display language in the Settings window */
 "settings.language" = "言語";
 "settings.language.english" = "English";

@@ -128,6 +128,17 @@ struct FitCalculatorTests {
         #expect(rect == CGRect(x: -1750, y: -1750, width: 4000, height: 4000))
     }
 
+    @Test("Fits generated thumbnails into the 16 pt leading icon of the list mode (FR-048)", arguments: [
+        (CGSize(width: 64, height: 36), CGSize(width: 16, height: 9)),
+        (CGSize(width: 36, height: 64), CGSize(width: 9, height: 16)),
+        (CGSize(width: 64, height: 64), CGSize(width: 16, height: 16)),
+        (CGSize(width: 16, height: 64), CGSize(width: 4, height: 16)),
+    ])
+    func fitsListIcon(imageSize: CGSize, expected: CGSize) {
+        let rect = FitCalculator.fit(imageSize: imageSize, in: CGSize(width: 16, height: 16))
+        #expect(rect.size == expected)
+    }
+
     @Test("Zoom still returns an empty rectangle for nonpositive dimensions", arguments: [
         (CGSize(width: 0, height: 100), CGSize(width: 500, height: 500)),
         (CGSize(width: 100, height: 100), CGSize(width: 0, height: 0)),

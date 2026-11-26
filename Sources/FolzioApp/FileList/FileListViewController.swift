@@ -1110,7 +1110,10 @@ final class FileListViewController: NSViewController {
         guard target.commands.allowsFileOperations else { return }
         let urls = target.urls
         guard !urls.isEmpty else { return }
-        PasteboardFileURLs.write(urls, to: .general)
+        // File references let paste find the items after they move or are renamed, as in Finder (FR-413).
+        Task { @MainActor in
+            await PasteboardFileURLs.copy(urls, to: .general)
+        }
     }
 
     /// Copy as Pathname: puts the absolute path of the single selected item on the pasteboard as a string

@@ -106,8 +106,11 @@ struct FolderContextMenuTests {
             #expect(!menu.items.contains { $0.action == #selector(DirectoryTreeViewController.newFolder(_:)) })
             let board = NSPasteboard.withUniqueName()
             defer { board.releaseGlobally() }
-            tree.copyFolders(copy, to: board)
-            #expect(Set(PasteboardFileURLs.fileURLs(in: board).map(\.path)) == Set([a.path, b.path]))
+            await tree.copyFolders(copy, to: board)
+            let copied = ClipboardFileReferences.resolve(PasteboardFileURLs.entries(in: board)).compactMap { resolution in
+                if case .found(let url) = resolution { url.resolvingSymlinksInPath().path } else { nil }
+            }
+            #expect(Set(copied) == Set([a, b].map { $0.resolvingSymlinksInPath().path }))
             let content = Data([8, 9])
             try content.write(to: a.appendingPathComponent("content.dat"))
             await withCheckedContinuation { continuation in

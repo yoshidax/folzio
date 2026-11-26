@@ -438,6 +438,7 @@ public enum TextKey: String, CaseIterable, Sendable {
     // MARK: - Accessibility
 
     case a11yThumbnail = "a11y.thumbnail"
+    case a11yVideoThumbnail = "a11y.videoThumbnail"
 
     /// Argument sequence (determines the positions and kinds of the positional format specifiers).
     public var arguments: [TextArgument] {
@@ -958,6 +959,8 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Error shown when folders selected in the directory tree include a folder inside another selected folder, so nothing is moved to the Trash"
         case .a11yThumbnail:
             return "Accessibility label for a thumbnail image"
+        case .a11yVideoThumbnail:
+            return "Accessibility label for a video thumbnail image"
         }
     }
 }

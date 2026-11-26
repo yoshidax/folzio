@@ -102,6 +102,7 @@ For a first look, see the [README](../README.md).
 ### View Modes and Columns
 
 - Switch between list view and thumbnail view. You can change the thumbnail size.
+- Videos show a play badge at the bottom-right of their thumbnail and of the small image at the start of their row.
 - Click a column header to sort.
   - When sorting by name, folders always come before files, in both ascending and descending order.
   - Zip files count as files.
@@ -256,6 +257,10 @@ For a first look, see the [README](../README.md).
 - Copy, move, duplicate, rename, move to Trash, drag and drop, and clipboard operations are available.
   Folders include their contents.
 - On a name conflict, choose "Replace", "Keep Both", or "Stop".
+- As in Finder, items you copy (⌘C) can still be pasted after they are moved, renamed, or moved to the Trash,
+  in Folzio or in another app.
+  - Pasting fails for items moved to another volume or deleted; the failure shows their names.
+  - Pasting in Finder pastes the copied items, and pasting in a text editor pastes their file names.
 - A confirmation dialog appears before operations.
   - In Settings (⌘,), you can turn it off separately for copying, moving, renaming, removing from Favorites,
     and moving to the Trash. "Don’t ask again" in the dialog turns off only that operation.
@@ -501,6 +506,7 @@ The toolbar search field filters the list you are viewing by name. To look throu
 |--------|----------|
 | Settings | ⌘, |
 | Quit | ⌘Q |
+| Open the shortcut reference | ⌘/, File menu → "Keyboard Shortcuts…" |
 | Focus the tree / list / preview | ⌥⌘1 / ⌥⌘2 / ⌥⌘3 |
 | File list only / preview only (the same key returns to three panes) | ⌃⌘2 / ⌃⌘3, View menu, toolbar |
 | Show / hide the toolbar | ⇧⌘T, View menu |
@@ -529,6 +535,7 @@ The toolbar search field filters the list you are viewing by name. To look throu
 | Jump to the "Favorites" heading | ⇧⌘F |
 | Show the contents of a folder, a zip file, or a directory inside a zip | Double-click, ⌘↓, "Show Contents" in the context menu |
 | Go up one level | ⌘↑, double-click the `..` row, "Enclosing Folder" (上の階層へ) in the context menu |
+| Go back / forward in the history | ⌘[ / ⌘], Go menu, toolbar |
 
 ### File List and Preview
 

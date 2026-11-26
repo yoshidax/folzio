@@ -145,13 +145,18 @@ private final class RenameTextField: NSTextField {
 
 @MainActor
 final class ThumbnailItemView: NSCollectionViewItem {
-    private let thumbnailImageView = NSImageView()
+    private let thumbnailImageView = VideoBadgeImageView()
 
     /// The view Quick Look zooms from and back to (FR-247).
     var quickLookSourceView: NSView { thumbnailImageView }
     private let nameLabel = RenameTextField(wrappingLabelWithString: "")
 
     private(set) var representedURL: URL?
+    /// Kind of the item shown. Decides the video badge and the accessibility label (FR-415, FR-419).
+    private var representedKind: ListItemKind?
+
+    /// Whether the video badge is shown. Read by tests.
+    var showsVideoBadge: Bool { thumbnailImageView.showsVideoBadge }
     var onCommitRename: ((URL, String) -> Void)?
 
     private var originalName: String?
@@ -166,7 +171,7 @@ final class ThumbnailItemView: NSCollectionViewItem {
         thumbnailImageView.translatesAutoresizingMaskIntoConstraints = false
         thumbnailImageView.imageScaling = .scaleProportionallyUpOrDown
         thumbnailImageView.imageAlignment = .alignCenter
-        thumbnailImageView.setAccessibilityLabel(l10n.text(.a11yThumbnail))
+        updateThumbnailAccessibilityLabel()
         // NSImageView accepts drags itself and would hide drops on the thumbnail from the collection view,
         // so in-app drops onto folder items would never be validated (FR-163, bug: tak-44).
         thumbnailImageView.unregisterDraggedTypes()
@@ -207,7 +212,7 @@ final class ThumbnailItemView: NSCollectionViewItem {
     }
 
     @objc private func displayLanguageDidChange() {
-        thumbnailImageView.setAccessibilityLabel(l10n.text(.a11yThumbnail))
+        updateThumbnailAccessibilityLabel()
         if let representedURL, ParentLink.isParentLink(representedURL) {
             let label = l10n.text(.listParentRow)
             view.setAccessibilityLabel(label)
@@ -234,6 +239,8 @@ final class ThumbnailItemView: NSCollectionViewItem {
         }
         let urlChanged = representedURL != file.url
         representedURL = file.url
+        representedKind = file.kind
+        updateThumbnailAccessibilityLabel()
         if !isRenaming {
             nameLabel.stringValue = file.name
             nameLabel.setAccessibilityLabel(file.name)
@@ -249,12 +256,15 @@ final class ThumbnailItemView: NSCollectionViewItem {
             thumbnailImageView.imageScaling = .scaleProportionallyUpOrDown
             thumbnailImageView.contentTintColor = nil
             thumbnailImageView.image = NSWorkspace.shared.icon(forFile: file.url.path)
+            // The generic icon already shows the format, so no badge until the frame arrives (FR-417).
+            thumbnailImageView.showsVideoBadge = false
         }
         updateSelectionAppearance()
     }
 
     /// Kind icon for zip file, directory, and `..` rows. Does not request a thumbnail.
     func showListItemIcon(for kind: ListItemKind, pointSize: Double) {
+        thumbnailImageView.showsVideoBadge = false
         thumbnailImageView.imageScaling = .scaleNone
         thumbnailImageView.contentTintColor = IconCatalog.tintColor(for: kind)
         thumbnailImageView.image = IconCatalog.listItemIcon(for: kind, pointSize: CGFloat(pointSize))
@@ -284,6 +294,16 @@ final class ThumbnailItemView: NSCollectionViewItem {
             cgImage: image,
             size: NSSize(width: CGFloat(image.width), height: CGFloat(image.height))
         )
+        // A generated frame of a video gets the badge (FR-415). A replaced frame keeps it (EC-287).
+        thumbnailImageView.showsVideoBadge = representedKind.map {
+            VideoBadgeLayout.isShown(kind: $0, showingRepresentativeFrame: true)
+        } ?? false
+    }
+
+    /// "Video thumbnail" for videos and "Thumbnail" for everything else, in the display language (FR-419).
+    private func updateThumbnailAccessibilityLabel() {
+        let key: TextKey = representedKind?.isVideo == true ? .a11yVideoThumbnail : .a11yThumbnail
+        thumbnailImageView.setAccessibilityLabel(l10n.text(key))
     }
 
     override func prepareForReuse() {
@@ -294,6 +314,9 @@ final class ThumbnailItemView: NSCollectionViewItem {
         }
         onCommitRename = nil
         representedURL = nil
+        representedKind = nil
+        thumbnailImageView.showsVideoBadge = false
+        updateThumbnailAccessibilityLabel()
         thumbnailImageView.image = nil
         thumbnailImageView.imageScaling = .scaleProportionallyUpOrDown
         thumbnailImageView.contentTintColor = nil

@@ -215,12 +215,25 @@ final class FileOperationCoordinator {
         guard available.allowsPaste(move: move) else { return }
         switch available {
         case .fileURLs:
-            let urls = PasteboardFileURLs.fileURLs(in: pasteboard)
-            if move {
-                await self.move(urls, to: destination)
-            } else {
-                await self.copy(urls, to: destination)
+            // Resolve file references to where the items are now, off the UI thread, so items moved, renamed, or put
+            // in the Trash after copying are still pasted (FR-414).
+            let entries = PasteboardFileURLs.entries(in: pasteboard)
+            let resolutions = await Task.detached(priority: .userInitiated) {
+                ClipboardFileReferences.resolve(entries)
+            }.value
+            var urls: [URL] = []
+            var missing: [(url: URL, reason: OperationFailureReason)] = []
+            for resolution in resolutions {
+                switch resolution {
+                case .found(let url): urls.append(url)
+                case .missing(let name): missing.append((URL(fileURLWithPath: name), .sourceNotFound))
+                }
             }
+            guard !urls.isEmpty else {
+                await presentFailures(FileOperationResult(failed: missing))
+                return
+            }
+            await transfer(urls, to: destination, kind: move ? .move : .copy, unresolved: missing)
         case .imageData:
             let window = parentWindow ?? NSApp?.keyWindow ?? NSApp?.mainWindow
             _ = imports.beginImages(ExternalImageDrag.images(in: pasteboard), destination: destination) { [self, weak window] request, control in
@@ -299,7 +312,12 @@ final class FileOperationCoordinator {
         notifyFoldersChanged(sources: [file], destination: nil)
     }
 
-    private func transfer(_ urls: [URL], to destination: URL, kind: FileOperation.Kind, validateDrop: Bool = false) async {
+    /// `unresolved` lists pasted items whose file references no longer resolve. They are shown together with this
+    /// transfer's failures (EC-283).
+    private func transfer(
+        _ urls: [URL], to destination: URL, kind: FileOperation.Kind, validateDrop: Bool = false,
+        unresolved: [(url: URL, reason: OperationFailureReason)] = []
+    ) async {
         guard !urls.isEmpty else { return }
         var removed: [URL] = []
         defer { onOperationFinished?(urls, removed) }
@@ -325,7 +343,9 @@ final class FileOperationCoordinator {
             }
         )
 
-        await presentFailures(result)
+        var shown = result
+        shown.failed.insert(contentsOf: unresolved, at: 0)
+        await presentFailures(shown)
         if case .move = kind {
             // result.succeeded contains destination URLs, so remove history using the original locations that did not
             // fail (FR-109).

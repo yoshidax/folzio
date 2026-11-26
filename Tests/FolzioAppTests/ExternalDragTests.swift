@@ -152,6 +152,70 @@ struct PasteboardFileURLsTests {
             #expect(PasteboardFileURLs.fileURLs(in: pasteboard).isEmpty)
         }
     }
+
+    @Test("Writes each item with its file URL and file name, as Finder does (FR-413, A-248)")
+    func writesItemsWithNames() {
+        withPasteboard { pasteboard in
+            let entries = [ClipboardFileEntry(url: "file:///.file/id=1.2", name: "a.jpg"),
+                           ClipboardFileEntry(url: file.absoluteString, name: "cat.jpg")]
+
+            #expect(PasteboardFileURLs.write(entries, to: pasteboard, ifChangeCount: pasteboard.changeCount))
+
+            let items = pasteboard.pasteboardItems ?? []
+            #expect(items.map { $0.string(forType: .fileURL) } == entries.map(\.url))
+            #expect(items.map { $0.string(forType: .string) } == ["a.jpg", "cat.jpg"])
+            #expect(PasteboardFileURLs.entries(in: pasteboard) == entries)
+        }
+    }
+
+    @Test("Keeps a later copy when the pasteboard changed while references were made (EC-281)")
+    func keepsLaterCopy() {
+        withPasteboard { pasteboard in
+            let changeCount = pasteboard.changeCount
+            pasteboard.clearContents()
+            pasteboard.setString("later", forType: .string)
+
+            #expect(!PasteboardFileURLs.write([ClipboardFileEntry(url: file.absoluteString, name: "cat.jpg")],
+                to: pasteboard, ifChangeCount: changeCount))
+            #expect(pasteboard.string(forType: .string) == "later")
+        }
+    }
+
+    @Test("Puts a file reference that drag readers also read as the item (FR-413)")
+    func copyPutsReference() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let photo = root.appendingPathComponent("photo.jpg")
+        try Data([1]).write(to: photo)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("FolzioTests.\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+
+        await PasteboardFileURLs.copy([photo], to: pasteboard)
+
+        let item = try #require(pasteboard.pasteboardItems?.first)
+        #expect(item.string(forType: .fileURL)?.hasPrefix("file:///.file/id=") == true)
+        #expect(item.string(forType: .string) == "photo.jpg")
+        let read = try #require(PasteboardFileURLs.fileURLs(in: pasteboard).first)
+        let path = try #require((read as NSURL).filePathURL)
+        #expect(path.resolvingSymlinksInPath().path == photo.resolvingSymlinksInPath().path)
+    }
+
+    @Test("Reads only items with a file URL when pasting (FR-348)")
+    func entriesSkipOtherItems() {
+        withPasteboard { pasteboard in
+            let text = NSPasteboardItem()
+            text.setString("note", forType: .string)
+            let web = NSPasteboardItem()
+            web.setString("https://example.com/a.jpg", forType: .fileURL)
+            let local = NSPasteboardItem()
+            local.setString(file.absoluteString, forType: .fileURL)
+            pasteboard.writeObjects([text, web, local])
+
+            #expect(PasteboardFileURLs.entries(in: pasteboard) == [ClipboardFileEntry(url: file.absoluteString, name: nil)])
+        }
+    }
 }
 
 @Suite("Drops from other apps")
