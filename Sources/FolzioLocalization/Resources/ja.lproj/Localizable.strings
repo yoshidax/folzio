@@ -1074,3 +1074,20 @@
 "settings.preview.scroll" = "スクロール";
 "settings.favorites" = "お気に入り";
 "settings.favorites.restoreExpansion" = "起動時に前回の開閉状態を復元する";
+
+"menu.app.checkForUpdates" = "アップデートを確認…";
+
+"update.available.title" = "新しいバージョンの Folzio があります";
+"update.available.message" = "Folzio %1$@ を入手できます。現在のバージョンは %2$@ です。";
+"update.available.open" = "ダウンロードページを開く";
+"update.available.close" = "閉じる";
+"update.upToDate.title" = "Folzio は最新です";
+"update.upToDate.message" = "バージョン %1$@ は最新のバージョンです。";
+"update.failed.title" = "アップデートを確認できませんでした";
+"update.failed.message" = "ネットワークの接続を確かめて、しばらくしてからもう一度お試しください。";
+"update.consent.title" = "アップデートを自動で確認しますか？";
+"update.consent.message" = "Folzio は起動時に、1日に1回まで GitHub に新しいバージョンがあるかを問い合わせます。ファイルやその情報は送りません。設定でいつでも変えられます。";
+"update.consent.enable" = "自動で確認する";
+"update.consent.decline" = "確認しない";
+"settings.updates" = "アップデート";
+"settings.updates.automaticCheck" = "アップデートを自動で確認する";

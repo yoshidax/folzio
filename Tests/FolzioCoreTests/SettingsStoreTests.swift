@@ -685,6 +685,63 @@ struct SettingsStoreTests {
         }
     }
 
+    // MARK: - Update Check (FR-430...FR-434)
+
+    @Test("Update check settings start unanswered and empty")
+    func updateCheckDefaults() {
+        withDefaults { defaults in
+            let store = SettingsStore(defaults: defaults)
+            #expect(store.automaticUpdateCheck == .notAsked)
+            #expect(store.lastAutomaticUpdateCheck == nil)
+            #expect(store.lastNotifiedUpdateVersion == nil)
+        }
+    }
+
+    @Test("Update check settings round-trip, and notAsked removes the answer")
+    func updateCheckRoundTrips() {
+        withDefaults { defaults in
+            let store = SettingsStore(defaults: defaults)
+            let date = Date(timeIntervalSinceReferenceDate: 800_000_000)
+            for setting in [AutomaticUpdateCheckSetting.enabled, .disabled] {
+                store.automaticUpdateCheck = setting
+                #expect(SettingsStore(defaults: defaults).automaticUpdateCheck == setting)
+            }
+            store.lastAutomaticUpdateCheck = date
+            store.lastNotifiedUpdateVersion = AppVersion(major: 1, minor: 10, patch: 2)
+            let reloaded = SettingsStore(defaults: defaults)
+            #expect(reloaded.lastAutomaticUpdateCheck == date)
+            #expect(reloaded.lastNotifiedUpdateVersion == AppVersion(major: 1, minor: 10, patch: 2))
+            #expect(defaults.string(forKey: "updates.lastNotifiedVersion") == "1.10.2")
+
+            store.automaticUpdateCheck = .notAsked
+            store.lastAutomaticUpdateCheck = nil
+            store.lastNotifiedUpdateVersion = nil
+            #expect(defaults.object(forKey: "updates.automaticCheck") == nil)
+            #expect(defaults.object(forKey: "updates.lastAutomaticCheck") == nil)
+            #expect(defaults.object(forKey: "updates.lastNotifiedVersion") == nil)
+            #expect(store.automaticUpdateCheck == .notAsked)
+        }
+    }
+
+    @Test("Update check settings read values of the wrong type as unset")
+    func updateCheckRejectsInvalidValues() {
+        withDefaults { defaults in
+            let store = SettingsStore(defaults: defaults)
+            for invalid in [0, 1, 0.5, "true", "YES", [true], ["value": true]] as [Any] {
+                defaults.set(invalid, forKey: "updates.automaticCheck")
+                #expect(store.automaticUpdateCheck == .notAsked)
+            }
+            for invalid in [0, 800_000_000.0, "2026-11-26", true] as [Any] {
+                defaults.set(invalid, forKey: "updates.lastAutomaticCheck")
+                #expect(store.lastAutomaticUpdateCheck == nil)
+            }
+            for invalid in ["v1.8.0", "1.8", "", "latest", 180, true] as [Any] {
+                defaults.set(invalid, forKey: "updates.lastNotifiedVersion")
+                #expect(store.lastNotifiedUpdateVersion == nil)
+            }
+        }
+    }
+
     private func withDefaults(_ body: (UserDefaults) -> Void) {
         let suiteName = "SettingsStoreTests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {

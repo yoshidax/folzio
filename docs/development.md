@@ -6,7 +6,7 @@ This guide covers source builds, tests, test fixtures, and the project structure
 Run the commands from the repository root.
 
 Built with Swift 6 and AppKit only, with no external package dependencies. The project uses Swift Package Manager; no Xcode project is needed.
-The app does not use network APIs (`URLSession` / `Network` / `NWConnection`).
+The app uses a network API (`URLSession`) only for the update check, in two files; `Network` and `NWConnection` are not used.
 
 To try the app, follow the instructions under [As a .app](#as-a-app).
 
@@ -61,7 +61,7 @@ swift test --filter FolzioAppTests
 swift test --filter FolzioPerformanceTests
 ```
 
-- To check that no network APIs are used:
+- To check that network APIs are used only for the update check:
 
 ```bash
 scripts/check-no-network.sh
@@ -161,7 +161,7 @@ scripts/
   make-fixtures.sh         # Generates fixtures
   make-webp-fixtures.sh    # Regenerates the bundled WebP files
   check-no-archive-writes.sh # Checks that archive code does not use write APIs
-  check-no-network.sh      # Checks that no network APIs are used
+  check-no-network.sh      # Checks that network APIs are used only for the update check
   check-readme-sync.sh     # Checks that README.md and README.ja.md are in sync
   check-site.py            # Checks the website pages before publishing
 site/                      # Website published with GitHub Pages (English, ja/ for Japanese)

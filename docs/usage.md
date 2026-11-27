@@ -33,6 +33,24 @@ For a first look, see the [README](../README.md).
   It shows the app icon, the version, and a link to the GitHub repository.
 - Close it with ⌘W. It also closes when the main window closes.
 
+### Checking for Updates
+
+- Choose Folzio → "Check for Updates…" (アップデートを確認…).
+  Folzio asks GitHub for the latest published release and shows the result.
+  - If a newer version is available, "Open Download Page" opens its release page in your web browser.
+    Download the ZIP there and replace the app as when you installed it. Folzio does not download or install updates.
+  - Otherwise, it tells you that your version is the latest, or that it could not check (for example, when offline).
+- On the first launch, Folzio asks whether to check for updates automatically.
+  - If you choose "Check Automatically", it checks when it starts, at most once every 24 hours,
+    and shows the dialog only for a version it has not told you about before. It shows nothing when your version is
+    the latest or the check fails.
+  - If you choose "Don't Check", it does not check unless you choose "Check for Updates…".
+  - Change this later in Settings (⌘,) → Updates → "Automatically check for updates".
+- The update check is the only network communication of the app.
+  - The request asks GitHub for the latest release of the public repository. It sends no files, file names,
+    or settings. Like any web request, it reaches GitHub with your IP address.
+  - The menu item is dimmed when the app has no version number (for example, under `swift run`).
+
 ## Folders and Favorites
 
 ### Directory Tree
@@ -580,6 +598,8 @@ The toolbar search field filters the list you are viewing by name. To look throu
 
 - Settings are stored in `UserDefaults`.
 - Shortcut changes are stored in `shortcuts.overrides`, only for the commands that differ from the default.
+- The update check stores your answer in `updates.automaticCheck`, the time of the last automatic check in
+  `updates.lastAutomaticCheck`, and the last version it told you about in `updates.lastNotifiedVersion`.
 - The `.app` and `swift run` use different domains.
 
 ```bash

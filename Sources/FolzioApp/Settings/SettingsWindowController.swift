@@ -83,6 +83,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
     private let videoHeader = NSTextField(labelWithString: "")
     private let fileOperationsHeader = NSTextField(labelWithString: "")
     private let slideshowHeader = NSTextField(labelWithString: "")
+    private let updatesHeader = NSTextField(labelWithString: "")
+    /// Turns the automatic update check at launch on or off (FR-434).
+    private let automaticUpdateCheckbox = WrappingCheckbox(checkboxWithTitle: "", target: nil, action: nil)
     private let intervalLabel = NSTextField(labelWithString: "")
     private let secondsLabel = NSTextField(labelWithString: "")
     private let transitionLabel = NSTextField(labelWithString: "")
@@ -153,7 +156,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         previousKeyView.nextKeyView = intervalField
         intervalField.nextKeyView = repeatsCheckbox
         repeatsCheckbox.nextKeyView = transitionPopup
-        transitionPopup.nextKeyView = languagePopup
+        transitionPopup.nextKeyView = automaticUpdateCheckbox
+        automaticUpdateCheckbox.nextKeyView = languagePopup
         let shortcutKeyViews = shortcutsView.keyViews
         for (index, view) in shortcutKeyViews.enumerated() {
             view.nextKeyView = shortcutKeyViews[(index + 1) % shortcutKeyViews.count]
@@ -172,6 +176,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         }
         repeatsCheckbox.target = self
         repeatsCheckbox.action = #selector(toggleRepeats(_:))
+        automaticUpdateCheckbox.target = self
+        automaticUpdateCheckbox.action = #selector(toggleAutomaticUpdateCheck(_:))
         intervalField.delegate = self
         intervalField.setAccessibilityLabel(l10n.text(.settingsIntervalA11y))
         repeatsCheckbox.setAccessibilityLabel(l10n.text(.settingsRepeat))
@@ -245,6 +251,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         fileOperationsHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
 
         slideshowHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        updatesHeader.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
 
         let languageRow = NSStackView(views: [languageLabel, languagePopup])
         languageRow.orientation = .horizontal
@@ -270,7 +277,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         transitionRow.alignment = .firstBaseline
         transitionRow.spacing = 8
 
-        for checkbox in orderedConfirmationCheckboxes + [restoreFavoritesCheckbox] {
+        for checkbox in orderedConfirmationCheckboxes + [restoreFavoritesCheckbox, automaticUpdateCheckbox] {
             checkbox.cell?.wraps = true
             checkbox.cell?.isScrollable = false
             checkbox.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -291,6 +298,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
             intervalRow,
             repeatsCheckbox,
             transitionRow,
+            updatesHeader,
+            automaticUpdateCheckbox,
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -303,6 +312,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         if let last = orderedConfirmationCheckboxes.last {
             stack.setCustomSpacing(Self.sectionSpacing, after: last)
         }
+        stack.setCustomSpacing(Self.sectionSpacing, after: transitionRow)
         stack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(stack)
 
@@ -312,7 +322,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
             stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Self.margin),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -Self.margin),
             intervalField.widthAnchor.constraint(equalToConstant: 80),
-        ] + (orderedConfirmationCheckboxes + [restoreFavoritesCheckbox]).map {
+        ] + (orderedConfirmationCheckboxes + [restoreFavoritesCheckbox, automaticUpdateCheckbox]).map {
             $0.widthAnchor.constraint(equalTo: stack.widthAnchor)
         })
 
@@ -422,6 +432,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
         let slideshow = store.slideshow
         intervalField.stringValue = String(slideshow.intervalSeconds)
         repeatsCheckbox.state = slideshow.repeats ? .on : .off
+        // Not answered yet shows as off; changing the checkbox counts as the answer (FR-434).
+        automaticUpdateCheckbox.state = store.automaticUpdateCheck == .enabled ? .on : .off
         if let item = transitionPopup.itemArray.first(where: {
             $0.representedObject as? String == slideshow.transition.rawValue
         }) {
@@ -469,7 +481,15 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, N
                              .settingsTransitionSlide, .settingsTransitionZoom].enumerated() {
             transitionPopup.item(at: index)?.title = l10n.text(key)
         }
+        updatesHeader.stringValue = l10n.text(.settingsUpdates)
+        automaticUpdateCheckbox.title = l10n.text(.settingsAutomaticUpdateCheck)
+        automaticUpdateCheckbox.setAccessibilityLabel(l10n.text(.settingsAutomaticUpdateCheck))
         resizeToFitContent()
+    }
+
+    /// Saved at once and used from the next launch (US98-AS7).
+    @objc private func toggleAutomaticUpdateCheck(_ sender: NSButton) {
+        store.automaticUpdateCheck = sender.state == .on ? .enabled : .disabled
     }
 
     @objc private func toggleFavoritesRestoration(_ sender: NSButton) {

@@ -39,6 +39,9 @@ public struct SettingsStore {
         static let slideshowRepeats = "slideshow.repeats"
         static let slideshowTransition = "slideshow.transition"
         static let shortcutOverrides = "shortcuts.overrides"
+        static let automaticUpdateCheck = "updates.automaticCheck"
+        static let lastAutomaticUpdateCheck = "updates.lastAutomaticCheck"
+        static let lastNotifiedUpdateVersion = "updates.lastNotifiedVersion"
     }
 
     private let defaults: UserDefaults
@@ -263,6 +266,51 @@ public struct SettingsStore {
 
     public var favoritesExpandedOnLaunch: Bool {
         restoresFavoritesExpansion && favoritesExpanded
+    }
+
+    // MARK: - Update Check (FR-430...FR-434)
+
+    /// Whether the user agreed to the automatic update check. A missing or non-Boolean value means they have not
+    /// answered yet, so the app asks at launch (FR-430). Writing `notAsked` removes the key.
+    public var automaticUpdateCheck: AutomaticUpdateCheckSetting {
+        get {
+            switch storedStrictBool(forKey: Keys.automaticUpdateCheck) {
+            case true?: return .enabled
+            case false?: return .disabled
+            case nil: return .notAsked
+            }
+        }
+        nonmutating set {
+            switch newValue {
+            case .enabled: defaults.set(true, forKey: Keys.automaticUpdateCheck)
+            case .disabled: defaults.set(false, forKey: Keys.automaticUpdateCheck)
+            case .notAsked: defaults.removeObject(forKey: Keys.automaticUpdateCheck)
+            }
+        }
+    }
+
+    /// When the last automatic check got a result (FR-431). Values that are not dates read as `nil`.
+    public var lastAutomaticUpdateCheck: Date? {
+        get { defaults.object(forKey: Keys.lastAutomaticUpdateCheck) as? Date }
+        nonmutating set {
+            if let newValue {
+                defaults.set(newValue, forKey: Keys.lastAutomaticUpdateCheck)
+            } else {
+                defaults.removeObject(forKey: Keys.lastAutomaticUpdateCheck)
+            }
+        }
+    }
+
+    /// The version last shown in the new-version dialog (FR-432). Values that are not versions read as `nil`.
+    public var lastNotifiedUpdateVersion: AppVersion? {
+        get { (defaults.object(forKey: Keys.lastNotifiedUpdateVersion) as? String).flatMap(AppVersion.init) }
+        nonmutating set {
+            if let newValue {
+                defaults.set(newValue.description, forKey: Keys.lastNotifiedUpdateVersion)
+            } else {
+                defaults.removeObject(forKey: Keys.lastNotifiedUpdateVersion)
+            }
+        }
     }
 
     /// The new Favorites expansion keys reject numbers; existing keys retain their previous Boolean coercion

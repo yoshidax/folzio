@@ -107,6 +107,7 @@ public enum TextKey: String, CaseIterable, Sendable {
     // MARK: - Menu Bar
 
     case menuAppAbout = "menu.app.about"
+    case menuAppCheckForUpdates = "menu.app.checkForUpdates"
     case menuAppSettings = "menu.app.settings"
     case menuAppQuit = "menu.app.quit"
     case menuFile = "menu.file"
@@ -332,6 +333,23 @@ public enum TextKey: String, CaseIterable, Sendable {
     case aboutIcon = "about.icon"
     case aboutLink = "about.link"
 
+    // MARK: - Update Check
+
+    case updateAvailableTitle = "update.available.title"
+    case updateAvailableMessage = "update.available.message"
+    case updateAvailableOpen = "update.available.open"
+    case updateAvailableClose = "update.available.close"
+    case updateUpToDateTitle = "update.upToDate.title"
+    case updateUpToDateMessage = "update.upToDate.message"
+    case updateFailedTitle = "update.failed.title"
+    case updateFailedMessage = "update.failed.message"
+    case updateConsentTitle = "update.consent.title"
+    case updateConsentMessage = "update.consent.message"
+    case updateConsentEnable = "update.consent.enable"
+    case updateConsentDecline = "update.consent.decline"
+    case settingsUpdates = "settings.updates"
+    case settingsAutomaticUpdateCheck = "settings.updates.automaticCheck"
+
     // MARK: - Shortcut Reference
 
     case menuFileShortcuts = "menu.file.shortcuts"
@@ -456,8 +474,10 @@ public enum TextKey: String, CaseIterable, Sendable {
             return [.text]
         case .contextCopySingle:
             return [.text]
-        case .dialogExtensionMessage, .dialogOperationFailureLine, .dialogOpenWithDetail:
+        case .dialogExtensionMessage, .dialogOperationFailureLine, .dialogOpenWithDetail, .updateAvailableMessage:
             return [.text, .text]
+        case .updateUpToDateMessage:
+            return [.text]
         case .searchBarResults, .searchBarSearching:
             return [.text, .text, .text]
         case .contextCopyMultiple, .dialogConfirmCopy, .dialogConfirmMove, .searchBarCount:
@@ -961,6 +981,36 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Accessibility label for a thumbnail image"
         case .a11yVideoThumbnail:
             return "Accessibility label for a video thumbnail image"
+        case .menuAppCheckForUpdates:
+            return "Update check item in the application menu, right after About (ends with … because it opens a dialog)"
+        case .updateAvailableTitle:
+            return "Title of the dialog shown when a newer version of the app is published. Do not translate the app name"
+        case .updateAvailableMessage:
+            return "Message of the new-version dialog. %1$@ is the newest version and %2$@ is the running version, for example 1.8.0 and 1.7.0"
+        case .updateAvailableOpen:
+            return "Default button of the new-version dialog. Opens the release page in the web browser"
+        case .updateAvailableClose:
+            return "Button that closes the new-version dialog without opening anything"
+        case .updateUpToDateTitle:
+            return "Title of the dialog shown when the running version is the newest. Do not translate the app name"
+        case .updateUpToDateMessage:
+            return "Message of the up-to-date dialog. %1$@ is the running version, for example 1.7.0"
+        case .updateFailedTitle:
+            return "Title of the dialog shown when the update check could not reach or read the release information"
+        case .updateFailedMessage:
+            return "Message of the dialog shown when the update check failed"
+        case .updateConsentTitle:
+            return "Question shown once at launch, asking whether to check for updates automatically"
+        case .updateConsentMessage:
+            return "Explanation in the automatic update check question: when it checks, what it sends, and where to change it"
+        case .updateConsentEnable:
+            return "Default button of the automatic update check question. Turns the automatic check on"
+        case .updateConsentDecline:
+            return "Button of the automatic update check question. Turns the automatic check off"
+        case .settingsUpdates:
+            return "Section heading in the Settings window for the update check"
+        case .settingsAutomaticUpdateCheck:
+            return "Checkbox and accessibility label in the Settings window that turns the automatic update check at launch on or off"
         }
     }
 }

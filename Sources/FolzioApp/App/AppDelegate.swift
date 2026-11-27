@@ -13,6 +13,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindowController: SettingsWindowController?
     private var aboutWindowController: AboutWindowController?
 
+    /// Checks for updates from the menu and at launch (FR-422...FR-433). Under `swift run` there is no Info.plist, so
+    /// there is no version and the check stays off (FR-422, EC-299).
+    private(set) lazy var updateCheckController: UpdateCheckController = {
+        let value = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+        let controller = UpdateCheckController(
+            currentVersion: AboutInfo.displayVersion(from: value).flatMap(AppVersion.init)
+        )
+        controller.canPresent = { [weak self] in
+            self?.mainWindowController?.canShowShortcuts ?? false
+        }
+        return controller
+    }()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         launchToListState = performanceSignposter.beginInterval("LaunchToList")
 
@@ -39,6 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         ImportSessionManager.shared.start()
         NSApp.activate(ignoringOtherApps: true)
+
+        // Runs on a later turn of the main run loop, after the main window is on screen (FR-430, FR-431).
+        Task { @MainActor [weak self] in
+            self?.updateCheckController.performLaunchAction()
+        }
     }
 
     @objc private func displayLanguageDidChange() {
@@ -93,6 +111,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Checks for updates and shows the result (FR-423). Disabled without a version or while a check runs (FR-422).
+    @objc func checkForUpdates(_ sender: Any?) {
+        updateCheckController.checkFromMenu()
+    }
+
     @objc func showSettings(_ sender: Any?) {
         let controller: SettingsWindowController
         if let existing = settingsWindowController {
@@ -130,6 +153,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
+        case #selector(checkForUpdates(_:)):
+            return updateCheckController.canCheck
         case #selector(showShortcuts(_:)):
             return mainWindowController?.canShowShortcuts ?? false
         case #selector(previewZoomIn(_:)):

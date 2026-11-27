@@ -1074,3 +1074,20 @@
 "settings.preview.scroll" = "Scroll";
 "settings.favorites" = "Favorites";
 "settings.favorites.restoreExpansion" = "Restore previous expansion state on launch";
+
+"menu.app.checkForUpdates" = "Check for Updates…";
+
+"update.available.title" = "A new version of Folzio is available";
+"update.available.message" = "Folzio %1$@ is available. You have version %2$@.";
+"update.available.open" = "Open Download Page";
+"update.available.close" = "Close";
+"update.upToDate.title" = "Folzio is up to date";
+"update.upToDate.message" = "Version %1$@ is the latest version.";
+"update.failed.title" = "Couldn't check for updates";
+"update.failed.message" = "Check your network connection and try again later.";
+"update.consent.title" = "Check for updates automatically?";
+"update.consent.message" = "Folzio can ask GitHub whether a new version is available when it starts, at most once a day. It sends no files or information about them. You can change this in Settings at any time.";
+"update.consent.enable" = "Check Automatically";
+"update.consent.decline" = "Don't Check";
+"settings.updates" = "Updates";
+"settings.updates.automaticCheck" = "Automatically check for updates";

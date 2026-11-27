@@ -64,6 +64,15 @@ final class MainMenu {
         )
         aboutItem.target = nil
         appMenu.addItem(aboutItem)
+
+        // No shortcut, like About; reachable from the menu bar with the keyboard (FR-422).
+        let checkForUpdatesItem = NSMenuItem(
+            title: l10n.text(.menuAppCheckForUpdates),
+            action: #selector(AppDelegate.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        checkForUpdatesItem.target = nil
+        appMenu.addItem(checkForUpdatesItem)
         appMenu.addItem(.separator())
 
         let settingsItem = NSMenuItem(
@@ -386,7 +395,8 @@ final class MainMenu {
         navigateMenu.addItem(forwardItem)
 
         let bindings: [(NSMenuItem, TextKey)] = [
-            (aboutItem, .menuAppAbout), (settingsItem, .menuAppSettings), (quitItem, .menuAppQuit),
+            (aboutItem, .menuAppAbout), (checkForUpdatesItem, .menuAppCheckForUpdates), (settingsItem, .menuAppSettings),
+            (quitItem, .menuAppQuit),
             (fileMenuItem, .menuFile), (newFolderItem, .menuFileNewFolder), (openItem, .menuFileOpen),
             (openWithItem, .menuFileOpenWith),
             (openContainerItem, .menuFileShowContents), (goUpItem, .menuFileEnclosingFolder),

@@ -6,7 +6,7 @@
 コマンドはリポジトリのルートで実行してください。
 
 Swift 6 + AppKit のみで実装し、外部パッケージに依存しません。Swift Package 構成で、Xcode プロジェクトは不要です。
-アプリはネットワーク API（`URLSession` / `Network` / `NWConnection`）を使用しません。
+アプリはネットワーク API（`URLSession`）をアップデートの確認だけに、2 つのファイルで使います。`Network` と `NWConnection` は使用しません。
 
 アプリを試すには「[.app として起動](#app-として起動)」の手順を使います。
 
@@ -61,7 +61,7 @@ swift test --filter FolzioAppTests
 swift test --filter FolzioPerformanceTests
 ```
 
-- ネットワーク非依存の確認:
+- ネットワーク API の使用がアップデートの確認だけであることの確認:
 
 ```bash
 scripts/check-no-network.sh
@@ -161,7 +161,7 @@ scripts/
   make-fixtures.sh         # フィクスチャ生成
   make-webp-fixtures.sh    # 同梱 WebP の再生成
   check-no-archive-writes.sh # アーカイブコードで書き込み API を使わないことの確認
-  check-no-network.sh      # ネットワーク API 非依存の確認
+  check-no-network.sh      # ネットワーク API の使用がアップデートの確認だけであることの確認
   check-readme-sync.sh     # README.md と README.ja.md の同期の確認
   check-site.py            # Web サイトのページの公開前の確認
 site/                      # GitHub Pages で公開する Web サイト（英語。日本語は ja/）
