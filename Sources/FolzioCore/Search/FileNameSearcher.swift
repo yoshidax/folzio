@@ -50,14 +50,17 @@ public struct FileNameSearcher: FileNameSearching {
         let task = Task.detached(priority: .userInitiated) {
             defer { continuation.finish() }
             let root = request.root
+            // Prefetch the values a media row needs, so a match does not read the file system again (research.md R7).
+            let prefetchedKeys = Array(DirectoryLister.mediaRowValueKeys.union([.isDirectoryKey, .isSymbolicLinkKey]))
             guard let enumerator = FileManager.default.enumerator(
                 at: root,
-                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+                includingPropertiesForKeys: prefetchedKeys,
                 options: [.skipsHiddenFiles, .skipsPackageDescendants],
                 errorHandler: { _, _ in true }
             ) else { return }
 
             let rebase = Self.rebaser(for: root)
+            var kindNameCache = KindNameCache()
             let clock = ContinuousClock()
             var pending: [MediaFile] = []
             var lastYield = clock.now
@@ -90,6 +93,7 @@ public struct FileNameSearcher: FileNameSearching {
                     pattern: request.pattern,
                     includesArchives: request.includesArchives,
                     kindNames: kindNames,
+                    kindNameCache: &kindNameCache,
                     rebase: rebase
                 ) {
                     pending.append(file)
@@ -119,7 +123,9 @@ public struct FileNameSearcher: FileNameSearching {
     /// compares as the same place in history and result organization (R38).
     private static func rebaser(for root: URL) -> @Sendable (URL) -> URL {
         let rootPath = SearchPath.normalized(root)
-        guard rootPath != "/" else { return { $0 } }
+        // Result URLs not rebased to another form are rebuilt from their own bytes, so they are cheap to hash and
+        // compare on the main thread (PlainFileURL, TAK-129).
+        guard rootPath != "/" else { return { PlainFileURL.make($0) } }
 
         // Accept the original root form (`/var/...`), the resolved form (`/private/var/...`), and forms with
         // `/private` added or removed.
@@ -137,14 +143,14 @@ public struct FileNameSearcher: FileNameSearching {
         }
         prefixes.remove(rootPath + "/")
         let ordered = prefixes.sorted { $0.count > $1.count }
-        guard !ordered.isEmpty else { return { $0 } }
+        guard !ordered.isEmpty else { return { PlainFileURL.make($0) } }
 
         return { url in
             let path = url.path
             for prefix in ordered where path.hasPrefix(prefix) {
                 return URL(fileURLWithPath: rootPath + "/" + path.dropFirst(prefix.count), isDirectory: url.hasDirectoryPath)
             }
-            return url
+            return PlainFileURL.make(url)
         }
     }
 
@@ -190,6 +196,7 @@ public struct FileNameSearcher: FileNameSearching {
         pattern: SearchPattern,
         includesArchives: Bool,
         kindNames: KindNames,
+        kindNameCache: inout KindNameCache,
         rebase: (URL) -> URL
     ) -> MediaFile? {
         let url = enumeratedURL
@@ -203,9 +210,35 @@ public struct FileNameSearcher: FileNameSearching {
             return nil
         }
         if let kind {
-            return DirectoryLister.mediaFile(at: rebase(url), kind: kind)
+            let rowURL = rebase(url)
+            if values?.isSymbolicLink == true {
+                // A link's own kind name can differ from a regular file's, so read it for the link itself.
+                return DirectoryLister.mediaFile(at: rowURL, kind: kind)
+            }
+            // The enumerator prefetched these values, so reading them does not touch the file system again.
+            let rowValues = try? url.resourceValues(forKeys: DirectoryLister.mediaRowValueKeys)
+            let typeDescription = kindNameCache.name(for: url)
+            return DirectoryLister.mediaFile(at: rowURL, kind: kind, values: rowValues, typeDescription: typeDescription)
         }
         // Only the name of a zip is matched; its contents are never opened (FR-083, 278).
         return DirectoryLister.archiveRow(at: rebase(url), kindNames: kindNames)
+    }
+}
+
+/// Kind names of regular media files, read once per extension during one search. Supported media is identified by
+/// its extension (FR-039), so files with the same extension share the same kind name (research.md R7).
+private struct KindNameCache {
+    private var names: [String: String?] = [:]
+
+    /// The file's `localizedTypeDescription`, read from the file system only for the first file with its extension
+    /// (compared case-insensitively). Nil when it cannot be read.
+    mutating func name(for url: URL) -> String? {
+        let key = url.pathExtension.lowercased()
+        if let cached = names[key] {
+            return cached
+        }
+        let name = (try? url.resourceValues(forKeys: [.localizedTypeDescriptionKey]))?.localizedTypeDescription
+        names[key] = .some(name)
+        return name
     }
 }

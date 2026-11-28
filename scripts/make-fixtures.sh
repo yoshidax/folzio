@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-    echo "usage: scripts/make-fixtures.sh <output-directory> [--big]" >&2
+    echo "usage: scripts/make-fixtures.sh <output-directory> [--big] [--multi-root-search] [--large-search]" >&2
     exit 2
 fi
 

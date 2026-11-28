@@ -1651,8 +1651,8 @@ final class DirectoryTreeViewController: NSViewController {
     private func observeDisplayedFolder() {
         withObservationTracking {
             _ = model.listing.folder
-            // Replace the subtree watch below the search root when a search starts or ends.
-            _ = model.listing.search?.root
+            // Replace the subtree watch below the search roots when a search starts or ends, or a root is renamed.
+            _ = model.listing.search?.roots
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.updateWatchSet()
@@ -1673,9 +1673,9 @@ final class DirectoryTreeViewController: NSViewController {
         }
         // Receive moves and deletions of favorite folders as changes to their parent folders (FR-067).
         folders.formUnion(favoriteParentFolders())
-        // While showing search results, receive changes at every level below the root and remove results that
-        // disappear (FR-087, R38).
-        watcher.watch(folders, subtrees: model.listing.search.map { [$0.root.standardizedFileURL] } ?? [])
+        // While showing search results, receive changes at every level below every root and remove results that
+        // disappear (FR-087, FR-440, R38).
+        watcher.watch(folders, subtrees: model.listing.search.map { Set($0.roots.map(\.standardizedFileURL)) } ?? [])
     }
 
     private func displayedNodes() -> [Node] {

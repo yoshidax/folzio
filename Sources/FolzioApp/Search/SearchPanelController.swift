@@ -2,30 +2,34 @@ import AppKit
 import FolzioCore
 import FolzioLocalization
 
-/// Button that accepts Tab focus regardless of the system Keyboard Navigation setting (R39).
-private final class KeyViewButton: NSButton {
-    override var canBecomeKeyView: Bool { true }
-}
-
-/// Search modal (a sheet on the main window). Accepts a keyword and search root directory, validates the root,
-/// then calls `onSearch` (FR-080–082). "Choose…" opens a standard `NSOpenPanel` as a child sheet and revalidates
-/// asynchronously after confirmation (FR-141–144).
+/// Search modal (a sheet on the main window). Accepts a keyword and one to ten search root rows, validates and
+/// organizes the roots, then calls `onSearch` (FR-080–082, FR-435–437). Each row's "Choose…" opens a standard
+/// `NSOpenPanel` as a child sheet and revalidates asynchronously after confirmation (FR-141–144).
 @MainActor
 final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
+    /// Reason shown below the rows. A row reason is rendered with the current row count, so it can drop or change
+    /// its row number when rows are added or removed (FR-435, FR-436).
+    private enum Reason {
+        case general(@MainActor () -> String)
+        case row(Int, SearchRootError)
+    }
+
     private let initialKeyword: String?
     private let initialRootPath: String
-    private let onSearch: (SearchPattern, URL) -> Void
+    private let onSearch: (SearchPattern, [URL]) -> Void
 
     private let headingLabel = NSTextField(labelWithString: "")
     private let descriptionLabel = NSTextField(wrappingLabelWithString: "")
-    private let keywordField = NSSearchField()
-    private let rootField = NSTextField()
+    let keywordField = NSSearchField()
+    let wildcardLabel = NSTextField(wrappingLabelWithString: "")
     private let keywordLabel = NSTextField(labelWithString: "")
     private let rootLabel = NSTextField(labelWithString: "")
+    private let rowsStack = NSStackView()
+    private(set) var rows: [SearchRootRowView] = []
+    let addRootButton = SearchKeyViewButton()
     private let reasonLabel = NSTextField(labelWithString: "")
-    private let chooseFolderButton = KeyViewButton()
-    private let cancelButton = KeyViewButton()
-    private let searchButton = KeyViewButton()
+    let cancelButton = SearchKeyViewButton()
+    private let searchButton = SearchKeyViewButton()
 
     private var inputState: SearchPanelInputState
     private var initialLocationTask: Task<Void, Never>?
@@ -34,9 +38,9 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
     private var folderPanel: NSOpenPanel?
     private var panelPresented = false
     private var initialFocusApplied = false
-    private var localizedReason: (@MainActor () -> String)?
+    private var reason: Reason?
 
-    init(keyword: String?, rootPath: String, onSearch: @escaping (SearchPattern, URL) -> Void) {
+    init(keyword: String?, rootPath: String, onSearch: @escaping (SearchPattern, [URL]) -> Void) {
         initialKeyword = keyword
         initialRootPath = rootPath
         self.onSearch = onSearch
@@ -53,81 +57,59 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
         let container = NSView()
 
         // The heading and its description tell this search from the toolbar name filter: it looks through the
-        // subfolders of the search root (FR-394). They match the Settings window's section headings and notes
+        // subfolders of the search roots (FR-394). They match the Settings window's section headings and notes
         // (FR-223): a bold heading, and a smaller, secondary note that is not interactive.
         headingLabel.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
-        headingLabel.stringValue = l10n.text(.searchHeading)
-        descriptionLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        descriptionLabel.textColor = .secondaryLabelColor
-        descriptionLabel.isSelectable = false
-        descriptionLabel.isEditable = false
-        descriptionLabel.refusesFirstResponder = true
-        descriptionLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        // The keyword field reads the note as its help, so the note is not read again as a separate item.
-        descriptionLabel.setAccessibilityElement(false)
-        descriptionLabel.stringValue = l10n.text(.searchDescription)
+        configureNote(descriptionLabel)
+        // The wildcard note uses the same style below the keyword field (FR-441).
+        configureNote(wildcardLabel)
 
-        keywordLabel.stringValue = l10n.text(.searchKeyword)
-        rootLabel.stringValue = l10n.text(.searchRoot)
-
-        keywordField.placeholderString = l10n.text(.searchKeyword)
         keywordField.delegate = self
-        keywordField.setAccessibilityLabel(l10n.text(.searchKeyword))
-        keywordField.setAccessibilityHelp(l10n.text(.searchDescription))
         keywordField.stringValue = initialKeyword ?? ""
 
-        configureRootField()
+        rowsStack.orientation = .vertical
+        rowsStack.alignment = .leading
+        rowsStack.spacing = 6
 
         reasonLabel.textColor = .systemRed
         reasonLabel.lineBreakMode = .byWordWrapping
         reasonLabel.maximumNumberOfLines = 0
         reasonLabel.isHidden = true
-        reasonLabel.setAccessibilityLabel(l10n.text(.searchError))
 
-        chooseFolderButton.title = l10n.text(.searchChoose)
-        chooseFolderButton.bezelStyle = .push
-        chooseFolderButton.target = self
-        chooseFolderButton.action = #selector(chooseFolder(_:))
-        chooseFolderButton.setAccessibilityLabel(l10n.text(.searchChoose))
-        chooseFolderButton.setAccessibilityHelp(l10n.text(.searchChooseHelp))
+        addRootButton.bezelStyle = .push
+        addRootButton.target = self
+        addRootButton.action = #selector(addRoot(_:))
 
-        cancelButton.title = l10n.text(.dialogCancel)
         cancelButton.bezelStyle = .push
         cancelButton.keyEquivalent = "\u{1b}"
         cancelButton.target = self
         cancelButton.action = #selector(cancel(_:))
 
-        searchButton.title = l10n.text(.searchSearch)
         searchButton.bezelStyle = .push
         searchButton.keyEquivalent = "\r"
         searchButton.target = self
         searchButton.action = #selector(search(_:))
 
         keywordField.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        rootField.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        rootField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        chooseFolderButton.setContentHuggingPriority(.required, for: .horizontal)
-
-        let rootRow = NSStackView(views: [rootField, chooseFolderButton])
-        rootRow.orientation = .horizontal
-        rootRow.alignment = .centerY
-        rootRow.spacing = 8
 
         let buttons = NSStackView(views: [cancelButton, searchButton])
         buttons.orientation = .horizontal
         buttons.spacing = 12
 
         let stack = NSStackView(views: [
-            headingLabel, descriptionLabel, keywordLabel, keywordField, rootLabel, rootRow, reasonLabel, buttons,
+            headingLabel, descriptionLabel, keywordLabel, keywordField, wildcardLabel, rootLabel, rowsStack,
+            addRootButton, reasonLabel, buttons,
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
         stack.setCustomSpacing(4, after: headingLabel)
         stack.setCustomSpacing(14, after: descriptionLabel)
-        stack.setCustomSpacing(14, after: keywordField)
+        stack.setCustomSpacing(4, after: keywordField)
+        stack.setCustomSpacing(14, after: wildcardLabel)
+        stack.setCustomSpacing(8, after: rowsStack)
+        stack.setCustomSpacing(14, after: addRootButton)
         stack.setCustomSpacing(14, after: reasonLabel)
-        stack.setCustomSpacing(14, after: rootRow)
         stack.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(stack)
 
@@ -139,44 +121,59 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
             container.widthAnchor.constraint(greaterThanOrEqualToConstant: 420),
             container.widthAnchor.constraint(lessThanOrEqualToConstant: 760),
             keywordField.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            rootRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            rowsStack.widthAnchor.constraint(equalTo: stack.widthAnchor),
             reasonLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             descriptionLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            wildcardLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             buttons.trailingAnchor.constraint(equalTo: stack.trailingAnchor),
         ])
 
-        keywordField.nextKeyView = rootField
-        rootField.nextKeyView = chooseFolderButton
-        chooseFolderButton.nextKeyView = cancelButton
-        cancelButton.nextKeyView = searchButton
-        searchButton.nextKeyView = keywordField
+        appendRowView(text: initialRootPath)
 
         view = container
         NotificationCenter.default.addObserver(
             self, selector: #selector(displayLanguageDidChange), name: .displayLanguageDidChange, object: nil
         )
+        applyText()
         refreshControls()
     }
 
-    @objc private func displayLanguageDidChange() {
+    private func configureNote(_ label: NSTextField) {
+        label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        label.textColor = .secondaryLabelColor
+        label.isSelectable = false
+        label.isEditable = false
+        label.refusesFirstResponder = true
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // The keyword field reads the notes as its help, so they are not read again as separate items.
+        label.setAccessibilityElement(false)
+    }
+
+    /// Sets every title, label, and accessibility text in the current language.
+    private func applyText() {
         headingLabel.stringValue = l10n.text(.searchHeading)
         descriptionLabel.stringValue = l10n.text(.searchDescription)
-        keywordField.setAccessibilityHelp(l10n.text(.searchDescription))
+        wildcardLabel.stringValue = l10n.text(.searchWildcardHint)
         keywordLabel.stringValue = l10n.text(.searchKeyword)
         rootLabel.stringValue = l10n.text(.searchRoot)
         keywordField.placeholderString = l10n.text(.searchKeyword)
         keywordField.setAccessibilityLabel(l10n.text(.searchKeyword))
-        rootField.setAccessibilityLabel(l10n.text(.searchRoot))
+        // The description, then the wildcard note (FR-394, FR-441).
+        keywordField.setAccessibilityHelp(l10n.text(.searchDescription) + " " + l10n.text(.searchWildcardHint))
         reasonLabel.setAccessibilityLabel(l10n.text(.searchError))
-        if !reasonLabel.isHidden, let localizedReason { reasonLabel.stringValue = localizedReason() }
-        chooseFolderButton.title = l10n.text(.searchChoose)
-        chooseFolderButton.setAccessibilityLabel(l10n.text(.searchChoose))
-        chooseFolderButton.setAccessibilityHelp(l10n.text(.searchChooseHelp))
+        addRootButton.title = l10n.text(.searchAddRoot)
+        addRootButton.setAccessibilityLabel(l10n.text(.searchAddRoot))
         cancelButton.title = l10n.text(.dialogCancel)
         searchButton.title = l10n.text(.searchSearch)
+        updateRowText()
+        if !reasonLabel.isHidden, reason != nil { renderReason(announce: false) }
         folderPanel?.title = l10n.text(.searchPanelTitle)
         folderPanel?.message = l10n.text(.searchPanelMessage)
         folderPanel?.prompt = l10n.text(.searchPanelPrompt)
+    }
+
+    @objc private func displayLanguageDidChange() {
+        applyText()
     }
 
     override func viewDidAppear() {
@@ -198,36 +195,104 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
         searchTask?.cancel()
     }
 
-    private func configureRootField() {
-        rootField.usesSingleLineMode = true
-        rootField.cell?.isScrollable = true
-        rootField.cell?.wraps = false
-        rootField.lineBreakMode = .byTruncatingHead
-        rootField.delegate = self
-        rootField.setAccessibilityLabel(l10n.text(.searchRoot))
-        rootField.stringValue = initialRootPath
+    // MARK: - Rows
+
+    /// Adds a row view at the end. Activates its width constraint after adding it to the stack.
+    private func appendRowView(text: String) {
+        let row = SearchRootRowView(text: text)
+        row.field.delegate = self
+        row.chooseButton.target = self
+        row.chooseButton.action = #selector(chooseFolder(_:))
+        row.removeButton.target = self
+        row.removeButton.action = #selector(removeRoot(_:))
+        rowsStack.addArrangedSubview(row)
+        row.widthAnchor.constraint(equalTo: rowsStack.widthAnchor).isActive = true
+        rows.append(row)
+        updateRowText()
+        updateKeyViewLoop()
+    }
+
+    private func updateRowText() {
+        let numbered = rows.count > 1
+        for (index, row) in rows.enumerated() {
+            row.updateText(number: numbered ? index + 1 : nil)
+        }
+    }
+
+    /// Tab order: keyword, each row (field, "Choose…", "Remove"), "Add Folder", Cancel, Search (FR-081). Disabled
+    /// buttons are skipped because they cannot become the key view.
+    private func updateKeyViewLoop() {
+        var chain: [NSView] = [keywordField]
+        for row in rows {
+            chain.append(contentsOf: [row.field, row.chooseButton, row.removeButton])
+        }
+        chain.append(contentsOf: [addRootButton, cancelButton, searchButton])
+        for (index, view) in chain.enumerated() {
+            view.nextKeyView = chain[(index + 1) % chain.count]
+        }
+    }
+
+    private func rowIndex(of view: Any?) -> Int? {
+        guard let view = view as? NSView else { return nil }
+        return rows.firstIndex { $0.field === view || $0.chooseButton === view || $0.removeButton === view }
+    }
+
+    @objc private func addRoot(_ sender: Any?) {
+        guard let index = inputState.addRow(panelPresented: panelPresented) else { return }
+        appendRowView(text: inputState.rootInputs[index].displayText)
+        renderReasonIfShown()
+        refreshControls()
+        view.window?.makeFirstResponder(rows[index].field)
+    }
+
+    @objc private func removeRoot(_ sender: Any?) {
+        guard let index = rowIndex(of: sender),
+              let focus = inputState.removeRow(at: index, panelPresented: panelPresented) else { return }
+        let row = rows.remove(at: index)
+        rowsStack.removeArrangedSubview(row)
+        row.removeFromSuperview()
+        // A reason for the removed row disappears; a reason for a later row moves up with it (FR-435).
+        if case let .row(reasonRow, error) = reason {
+            if reasonRow == index {
+                hideReason()
+            } else if reasonRow > index {
+                reason = .row(reasonRow - 1, error)
+            }
+        }
+        updateRowText()
+        updateKeyViewLoop()
+        renderReasonIfShown()
+        refreshControls()
+        view.window?.makeFirstResponder(rows[focus].field)
     }
 
     func controlTextDidChange(_ obj: Notification) {
         guard let field = obj.object as? NSTextField else { return }
-        if field === rootField {
-            inputState.updateRootText(field.stringValue)
-        } else if field === keywordField {
+        if field === keywordField {
             inputState.updateKeyword(field.stringValue)
+        } else if let index = rowIndex(of: field) {
+            inputState.updateRootText(field.stringValue, at: index)
         }
         refreshControls()
     }
 
-    /// Determines whether search and selection are available. Search remains available while resolving the initial
-    /// location; selection and duplicate searches are disabled while validating a search.
+    /// Determines whether search, selection, and row changes are available. Search remains available while resolving
+    /// the initial location; selection, row changes, and duplicate searches are disabled while work is pending.
     private func refreshControls() {
         let pending = inputState.pendingOperation
-        chooseFolderButton.isEnabled = !panelPresented && pending == .idle
+        let canRemove = inputState.canRemoveRow(panelPresented: panelPresented)
+        for row in rows {
+            row.chooseButton.isEnabled = !panelPresented && pending == .idle
+            row.removeButton.isEnabled = canRemove
+        }
+        addRootButton.isEnabled = inputState.canAddRow(panelPresented: panelPresented)
         searchButton.isEnabled = !panelPresented
             && pending != .validatingSearch
             && SearchPattern(keyword: keywordField.stringValue) != nil
         cancelButton.isEnabled = !panelPresented
     }
+
+    // MARK: - Search
 
     @objc private func cancel(_ sender: Any?) {
         guard !panelPresented else { return }
@@ -240,37 +305,35 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
         refreshControls()
         searchTask?.cancel()
         searchTask = Task { @MainActor [weak self] in
-            guard let self else { return }
             let home = FileManager.default.homeDirectoryForCurrentUser
-            let url: URL
-            switch ticket.input.resolvedInput(home: home) {
-            case let .success(value):
-                url = value
-            case let .failure(error):
-                guard self.inputState.complete(ticket, succeeded: false) else { return }
-                self.showReason { l10n.text(for: error) }
-                self.refreshControls()
-                return
-            }
-
-            let result = await SearchRoot.validate(url)
+            let result = await SearchRootList.validate(ticket.inputs, home: home)
+            guard let self else { return }
             switch result {
-            case let .success(root):
+            case let .success(roots):
+                // Organizing reads folder attributes, so it runs off the UI thread (FR-437).
+                let organized = await Task.detached(priority: .userInitiated) {
+                    SearchRootList.organize(roots)
+                }.value
                 guard self.inputState.complete(ticket, succeeded: true) else { return }
                 guard let pattern = SearchPattern(keyword: ticket.keyword) else { return }
                 self.dismiss(self)
-                self.onSearch(pattern, root)
-            case let .failure(error):
+                self.onSearch(pattern, organized)
+            case let .failure(failure):
                 guard self.inputState.complete(ticket, succeeded: false) else { return }
-                self.showReason { l10n.text(for: error) }
+                self.showReason(.row(failure.row, failure.error))
+                if self.rows.indices.contains(failure.row) {
+                    self.view.window?.makeFirstResponder(self.rows[failure.row].field)
+                }
                 self.refreshControls()
             }
         }
     }
 
+    // MARK: - Folder Selection
+
     @objc private func chooseFolder(_ sender: Any?) {
-        guard !panelPresented else { return }
-        guard let ticket = inputState.beginInitialLocationResolution(panelPresented: panelPresented) else {
+        guard !panelPresented, let row = rowIndex(of: sender) else { return }
+        guard let ticket = inputState.beginInitialLocationResolution(row: row, panelPresented: panelPresented) else {
             return
         }
         refreshControls()
@@ -286,18 +349,18 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
             switch result {
             case let .success(directory):
                 guard self.inputState.complete(ticket, succeeded: true) else { return }
-                self.presentFolderPanel(initialDirectory: directory)
+                self.presentFolderPanel(initialDirectory: directory, row: row)
             case let .failure(error):
                 guard self.inputState.complete(ticket, succeeded: false) else { return }
-                self.showReason { l10n.text(for: error) }
+                self.showReason(.general({ l10n.text(for: error) }))
                 self.refreshControls()
             }
         }
     }
 
-    private func presentFolderPanel(initialDirectory: URL) {
+    private func presentFolderPanel(initialDirectory: URL, row: Int) {
         guard !panelPresented, let window = view.window else {
-            showReason { l10n.text(.searchPanelFailed) }
+            showReason(.general({ l10n.text(.searchPanelFailed) }))
             refreshControls()
             return
         }
@@ -323,17 +386,17 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
             self.panelPresented = false
             self.folderPanel = nil
             guard response == .OK, let url = panel.url else {
-                self.focusChooseButton()
+                self.focusChooseButton(row: row)
                 self.refreshControls()
                 return
             }
-            self.beginSelectionValidation(url)
+            self.beginSelectionValidation(url, row: row)
         }
     }
 
-    private func beginSelectionValidation(_ url: URL) {
-        guard let ticket = inputState.beginSelectionValidation(url, panelPresented: panelPresented) else {
-            focusChooseButton()
+    private func beginSelectionValidation(_ url: URL, row: Int) {
+        guard let ticket = inputState.beginSelectionValidation(url, row: row, panelPresented: panelPresented) else {
+            focusChooseButton(row: row)
             refreshControls()
             return
         }
@@ -345,39 +408,62 @@ final class SearchPanelController: NSViewController, NSSearchFieldDelegate {
             switch result {
             case .success:
                 guard self.inputState.complete(ticket, succeeded: true) else { return }
-                self.inputState.applyPickedRoot(url)
-                self.rootField.stringValue = self.inputState.displayText
+                self.inputState.applyPickedRoot(url, at: row)
+                self.rows[row].field.stringValue = self.inputState.rootInputs[row].displayText
                 self.hideReason()
-                self.focusChooseButton()
+                self.focusChooseButton(row: row)
                 self.refreshControls()
             case let .failure(error):
                 guard self.inputState.complete(ticket, succeeded: false) else { return }
-                self.showReason { l10n.text(for: error) }
-                self.focusChooseButton()
+                self.showReason(.general({ l10n.text(for: error) }))
+                self.focusChooseButton(row: row)
                 self.refreshControls()
             }
         }
     }
 
-    private func focusChooseButton() {
-        view.window?.makeFirstResponder(chooseFolderButton)
+    private func focusChooseButton(row: Int) {
+        guard rows.indices.contains(row) else { return }
+        let button = rows[row].chooseButton
+        view.window?.makeFirstResponder(button)
         Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.view.window?.makeFirstResponder(self.chooseFolderButton)
+            self?.view.window?.makeFirstResponder(button)
         }
     }
 
+    // MARK: - Reason
+
     private func hideReason() {
         reasonLabel.isHidden = true
-        localizedReason = nil
+        reason = nil
     }
 
-    /// Shows the reason below the field and announces it (does not close the modal; FR-081).
-    private func showReason(_ render: @escaping @MainActor () -> String) {
-        localizedReason = render
-        let message = render()
+    /// Shows the reason below the rows and announces it (does not close the modal; FR-081, FR-436).
+    private func showReason(_ newReason: Reason) {
+        reason = newReason
+        renderReason(announce: true)
+    }
+
+    private func renderReasonIfShown() {
+        guard !reasonLabel.isHidden, reason != nil else { return }
+        renderReason(announce: false)
+    }
+
+    private func renderReason(announce: Bool) {
+        guard let reason else { return }
+        let message: String
+        switch reason {
+        case let .general(render):
+            message = render()
+        case let .row(row, error):
+            // A single row keeps the unnumbered wording (FR-436).
+            message = rows.count > 1
+                ? l10n.text(.searchErrorNumbered, .number(row + 1), .text(l10n.text(for: error)))
+                : l10n.text(for: error)
+        }
         reasonLabel.stringValue = message
         reasonLabel.isHidden = false
+        guard announce else { return }
         NSAccessibility.post(
             element: NSApp.mainWindow ?? reasonLabel,
             notification: .announcementRequested,

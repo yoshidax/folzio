@@ -9,6 +9,18 @@ import QuickLookThumbnailing
 public protocol ThumbnailProviding: Sendable {
     func thumbnail(for url: URL, pointSize: Double, scale: Double, version: FileContentVersion?) async -> CGImage?
     func cancel(for url: URL, pointSize: Double, scale: Double, version: FileContentVersion?)
+    /// A thumbnail that was already made and is still kept, without reading the file or making one. Lets a view show
+    /// it right away instead of the kind icon when an item is shown again (FR-445).
+    func cachedThumbnail(for url: URL, pointSize: Double, scale: Double, version: FileContentVersion?) -> CGImage?
+}
+
+extension ThumbnailProviding {
+    /// Providers that keep no thumbnails return nil.
+    public func cachedThumbnail(
+        for url: URL, pointSize: Double, scale: Double, version: FileContentVersion?
+    ) -> CGImage? {
+        nil
+    }
 }
 
 public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
@@ -21,14 +33,6 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
             return step
         }
         return sizeSteps[sizeSteps.count - 1]
-    }
-
-    private final class CachedEntry {
-        let image: CGImage
-
-        init(image: CGImage) {
-            self.image = image
-        }
     }
 
     /// Wrapper that lets a non-Sendable QuickLook request be captured by a cancellation closure.
@@ -57,14 +61,15 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
     private let archiveReader: (any ArchiveReading)?
     private let archiveLimiter = ConcurrencyLimiter(limit: ThumbnailProvider.maxConcurrentArchiveReads)
     private let archiveVideoLimiter = ConcurrencyLimiter(limit: ThumbnailProvider.maxConcurrentArchiveVideoReads)
-    private let cache = NSCache<NSString, CachedEntry>()
+    /// Kept thumbnails. The least recently used are removed first when the limit is passed (FR-447).
+    private let cache: ThumbnailMemoryCache
     private let lock = NSLock()
     private var inFlight: [UUID: InFlightRequest] = [:]
 
     public init(archiveReader: (any ArchiveReading)? = nil) {
         generator = QLThumbnailGenerator.shared
         self.archiveReader = archiveReader
-        cache.totalCostLimit = MemoryLimits.thumbnailCacheBytes
+        cache = ThumbnailMemoryCache(costLimit: MemoryLimits.thumbnailCacheBytes)
     }
 
     public func thumbnail(
@@ -76,8 +81,11 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
         let pixelSize = Self.pixelSize(forPointSize: pointSize, scale: scale)
         let key = Self.cacheKey(for: url, pixelSize: pixelSize, version: version)
 
-        if let cached = cache.object(forKey: key) {
-            return cached.image
+        if let cached = cache.image(forKey: key) {
+            PerformanceLog.logger.debug(
+                "[thumb] cache hit \(url.lastPathComponent, privacy: .private(mask: .hash)) px=\(pixelSize)"
+            )
+            return cached
         }
 
         if let location = ArchiveURL.parse(url) {
@@ -111,19 +119,41 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
             }
         }
 
+        let start = ContinuousClock.now
         do {
             let representation = try await generator.generateBestRepresentation(for: request)
             let image = representation.cgImage
             let cost = image.width * image.height * 4
-            cache.setObject(CachedEntry(image: image), forKey: key, cost: cost)
+            cache.setImage(image, forKey: key, cost: cost)
+            let kept = cache.usage
+            PerformanceLog.logger.debug(
+                "[thumb] made \(url.lastPathComponent, privacy: .private(mask: .hash)) px=\(pixelSize) \(image.width)x\(image.height) in \(PerformanceLog.milliseconds(since: start), format: .fixed(precision: 1)) ms, kept \(kept.count) (~\(kept.cost / 1_048_576) MB)"
+            )
             return image
         } catch {
+            // Log only the error domain and code: the description can contain the file's full path.
+            let nsError = error as NSError
+            let domain = nsError.domain
+            let code = nsError.code
+            PerformanceLog.logger.debug(
+                "[thumb] not made \(url.lastPathComponent, privacy: .private(mask: .hash)) px=\(pixelSize) after \(PerformanceLog.milliseconds(since: start), format: .fixed(precision: 1)) ms: \(domain, privacy: .public) \(code)"
+            )
             return nil
         }
     }
 
+    public func cachedThumbnail(
+        for url: URL, pointSize: Double, scale: Double, version: FileContentVersion?
+    ) -> CGImage? {
+        let pixelSize = Self.pixelSize(forPointSize: pointSize, scale: scale)
+        return cache.image(forKey: Self.cacheKey(for: url, pixelSize: pixelSize, version: version))
+    }
+
     public func cancel(for url: URL, pointSize: Double, scale: Double, version: FileContentVersion?) {
         let pixelSize = Self.pixelSize(forPointSize: pointSize, scale: scale)
+        PerformanceLog.logger.debug(
+            "[thumb] cancel \(url.lastPathComponent, privacy: .private(mask: .hash)) px=\(pixelSize)"
+        )
         let cancellations: [@Sendable () -> Void] = lock.withLock {
             let matches = inFlight.filter {
                 $0.value.url == url && $0.value.pixelSize == pixelSize && $0.value.version == version
@@ -188,7 +218,7 @@ public final class ThumbnailProvider: ThumbnailProviding, @unchecked Sendable {
             task.cancel()
         }
         guard let image, !task.isCancelled else { return nil }
-        cache.setObject(CachedEntry(image: image), forKey: key, cost: image.width * image.height * 4)
+        cache.setImage(image, forKey: key, cost: image.width * image.height * 4)
         return image
     }
 

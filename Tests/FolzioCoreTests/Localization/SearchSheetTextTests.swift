@@ -13,7 +13,7 @@ struct SearchSheetTextTests {
             ),
             "en": (
                 "Search Including Subfolders",
-                "Finds files and folders whose names match, in the folder you search in and all of its subfolders."
+                "Finds files and folders whose names match, in the folders you search in and all of their subfolders."
             ),
         ]
         #expect(TextKey.searchHeading.arguments.isEmpty)
@@ -24,5 +24,31 @@ struct SearchSheetTextTests {
             #expect(localizer.text(.searchHeading) == texts.heading)
             #expect(localizer.text(.searchDescription) == texts.note)
         }
+    }
+
+    /// The wildcard note below the keyword field (FR-441, TAK-104).
+    @Test("The wildcard note has the approved wording in both languages and takes no argument")
+    func wildcardNote() throws {
+        let expected = [
+            "ja": "* は0文字以上の任意の文字、? は任意の1文字に一致します。* か ? を含むときは、名前全体と一致するものを探します。",
+            "en": "* matches any number of characters and ? matches one character. With * or ?, the whole name must match.",
+        ]
+        #expect(TextKey.searchWildcardHint.arguments.isEmpty)
+        for language in LocalizationTestSupport.languages {
+            let localizer = LocalizationTestSupport.localizer(language)
+            #expect(localizer.text(.searchWildcardHint) == expected[language])
+        }
+    }
+
+    /// Row numbers and the search bar summary for several roots (FR-435, FR-436, FR-439, TAK-104).
+    @Test("Numbered labels, the numbered reason, and the several-roots summary insert their values")
+    func severalRootTexts() {
+        let ja = LocalizationTestSupport.localizer("ja")
+        #expect(ja.text(.searchRootNumbered, .number(2)) == "検索起点ディレクトリ 2")
+        #expect(ja.text(.searchErrorNumbered, .number(3), .text("理由")) == "3 番目の検索起点: 理由")
+        #expect(ja.text(.searchBarMultipleRoots, .text("Photos"), .number(2)) == "Photos ほか 2 か所")
+        let en = LocalizationTestSupport.localizer("en")
+        #expect(en.text(.searchRemoveRootNumbered, .number(2)) == "Remove Folder 2")
+        #expect(en.text(.searchBarMultipleRoots, .text("Photos"), .number(1)) == "Photos and 1 more")
     }
 }

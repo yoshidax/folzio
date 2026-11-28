@@ -1,6 +1,7 @@
 import AppKit
 import FolzioCore
 import FolzioLocalization
+import os
 import Quartz
 
 @MainActor
@@ -178,6 +179,8 @@ final class ListModeView: NSView {
     private var lastURLs: [URL] = []
     /// `BrowserModel.contentChangeGeneration` already applied to the rows (FR-228).
     private var lastContentChangeGeneration = 0
+    /// `BrowserModel.searchOrderGeneration` already applied (FR-444).
+    private var lastSearchOrderGeneration: Int
     private var isApplyingSelection = false
     private var isSyncingSortDescriptors = false
     private var sortMenuInstalled = false
@@ -193,6 +196,7 @@ final class ListModeView: NSView {
     init(model: BrowserModel, provider: any ThumbnailProviding) {
         self.model = model
         self.provider = provider
+        self.lastSearchOrderGeneration = model.searchOrderGeneration
         super.init(frame: .zero)
         setup()
         NotificationCenter.default.addObserver(
@@ -372,6 +376,7 @@ final class ListModeView: NSView {
             _ = model.visibleColumns
             _ = model.listing.search
             _ = model.contentChangeGeneration
+            _ = model.searchOrderGeneration
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.applyModel()
@@ -386,6 +391,16 @@ final class ListModeView: NSView {
     }
 
     private func applyModel() {
+        let start = ContinuousClock.now
+        defer {
+            let elapsed = PerformanceLog.milliseconds(since: start)
+            if elapsed >= 2 {
+                let rows = model.listing.files.count
+                PerformanceLog.logger.debug(
+                    "[main] list applyModel \(elapsed, format: .fixed(precision: 1)) ms rows=\(rows)"
+                )
+            }
+        }
         updateLocationColumn()
         updateColumnVisibility()
         // For a hidden mode, defer row reloading and selection updates until it is shown (viewDidUnhide).
@@ -399,13 +414,22 @@ final class ListModeView: NSView {
         let selected = SelectionIndex.indexes(of: model.selection.selected, in: urls)
 
         isApplyingSelection = true
+        var onlyAppended = false
         if urls != lastURLs {
-            if renamingURL != nil {
+            let appended = appendedRows(from: lastURLs, to: urls)
+            if renamingURL != nil, appended == nil {
                 finishRenaming(commit: false)
             }
             lastURLs = urls
             lastContentChangeGeneration = model.contentChangeGeneration
-            tableView.reloadData()
+            if appended != nil {
+                // Rows were only added at the end (a search adding results; FR-085). Keep the visible rows, their
+                // thumbnails, and a rename in progress instead of reloading them (FR-443).
+                tableView.noteNumberOfRowsChanged()
+                onlyAppended = true
+            } else {
+                tableView.reloadData()
+            }
         } else if lastContentChangeGeneration != model.contentChangeGeneration {
             // Several changes may have happened while hidden; then only the latest set is known, so reload all rows.
             let missedChanges = model.contentChangeGeneration &- lastContentChangeGeneration != 1
@@ -424,8 +448,16 @@ final class ListModeView: NSView {
         }
         isApplyingSelection = false
 
+        let sortedSearch = lastSearchOrderGeneration != model.searchOrderGeneration
+        lastSearchOrderGeneration = model.searchOrderGeneration
         if let focused = model.selection.focused, let row = urls.firstIndex(of: focused) {
-            tableView.scrollRowToVisible(row)
+            // Rows added at the end of a running search do not move the focused row, so do not scroll for them.
+            if !onlyAppended || sortedSearch {
+                tableView.scrollRowToVisible(row)
+            }
+        } else if sortedSearch, !urls.isEmpty {
+            // The finished search results were sorted and nothing is focused: show the top of the list (FR-444).
+            tableView.scrollRowToVisible(0)
         }
 
         syncSortDescriptors()
@@ -866,9 +898,6 @@ extension ListModeView: NSTableViewDelegate {
             cell.cancelIconRequest(using: provider)
             cell.representedURL = file.url
             cell.representedVersion = file.contentVersion
-            // The generic icon already shows the format, so no badge until the frame arrives (FR-418).
-            cell.iconView.showsVideoBadge = false
-            cell.iconView.image = file.kind.mediaKind.flatMap { IconCatalog.fallbackIcon(for: $0) }
 
             let scale = Double(
                 window?.backingScaleFactor
@@ -883,22 +912,35 @@ extension ListModeView: NSTableViewDelegate {
             let url = file.url
             let version = file.contentVersion
             let showsBadge = VideoBadgeLayout.isShown(kind: file.kind, showingRepresentativeFrame: true)
-            cell.iconTask = Task { [weak cell] in
-                let image = await provider.thumbnail(
-                    for: url,
-                    pointSize: pointSize,
-                    scale: scale,
-                    version: version
-                )
-                guard !Task.isCancelled,
-                      let cell,
-                      cell.representedURL == url,
-                      cell.representedVersion == version,
-                      let image else {
-                    return
-                }
-                cell.iconView.image = Self.listIconImage(from: image, pointSize: pointSize)
+            let name = file.name
+            if let kept = provider.cachedThumbnail(for: url, pointSize: pointSize, scale: scale, version: version) {
+                // A thumbnail made earlier and still kept is shown at once, without the generic icon (FR-445).
+                PerformanceLog.logger.debug("[list] row \(name, privacy: .private(mask: .hash)) shows kept")
+                cell.iconView.image = Self.listIconImage(from: kept, pointSize: pointSize)
                 cell.iconView.showsVideoBadge = showsBadge
+            } else {
+                PerformanceLog.logger.debug("[list] row \(name, privacy: .private(mask: .hash)) shows icon, request")
+                // The generic icon already shows the format, so no badge until the frame arrives (FR-418).
+                cell.iconView.showsVideoBadge = false
+                cell.iconView.image = file.kind.mediaKind.flatMap { IconCatalog.fallbackIcon(for: $0) }
+
+                cell.iconTask = Task { [weak cell] in
+                    let image = await provider.thumbnail(
+                        for: url,
+                        pointSize: pointSize,
+                        scale: scale,
+                        version: version
+                    )
+                    guard !Task.isCancelled,
+                          let cell,
+                          cell.representedURL == url,
+                          cell.representedVersion == version,
+                          let image else {
+                        return
+                    }
+                    cell.iconView.image = Self.listIconImage(from: image, pointSize: pointSize)
+                    cell.iconView.showsVideoBadge = showsBadge
+                }
             }
         }
 

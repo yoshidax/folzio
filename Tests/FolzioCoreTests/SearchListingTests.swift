@@ -45,4 +45,48 @@ struct SearchListingTests {
         #expect(trailing.root.absoluteString.hasSuffix("/"))
         #expect(trailing.location(of: file(path)) == expected)
     }
+
+    private func listing(roots: [String]) -> SearchListing {
+        SearchListing(
+            keyword: "cat",
+            roots: roots.map { URL(fileURLWithPath: $0, isDirectory: true) },
+            phase: .finished,
+            totalCount: 0
+        )
+    }
+
+    @Test("Each item starts from the root that contains it")
+    func locationWithMultipleRoots() {
+        let search = listing(roots: ["/test-homes/me/Pictures", "/Volumes/Disk/Archive"])
+        #expect(search.location(of: file("/test-homes/me/Pictures/2024/a.jpg")) == "Pictures/2024")
+        #expect(search.location(of: file("/Volumes/Disk/Archive/b.jpg")) == "Archive")
+        #expect(search.root(containing: file("/Volumes/Disk/Archive/x/b.jpg"))?.path == "/Volumes/Disk/Archive")
+        #expect(search.root(containing: file("/elsewhere/c.jpg")) == nil)
+    }
+
+    @Test("A root nested behind a hidden folder of another root contains its own items")
+    func nestedRootWins() {
+        let search = listing(roots: ["/p", "/p/.hidden/d"])
+        #expect(search.root(containing: file("/p/.hidden/d/e/a.jpg"))?.path == "/p/.hidden/d")
+        #expect(search.location(of: file("/p/.hidden/d/e/a.jpg")) == "d/e")
+        #expect(search.location(of: file("/p/x/a.jpg")) == "p/x")
+    }
+
+    @Test("Roots with the same folder name, ignoring case, start from their absolute paths")
+    func sharedRootNames() {
+        let search = listing(roots: ["/Volumes/X/Photos", "/test-homes/me/photos", "/test-homes/me/Other"])
+        #expect(search.location(of: file("/Volumes/X/Photos/2024/a.jpg")) == "/Volumes/X/Photos/2024")
+        #expect(search.location(of: file("/test-homes/me/photos/b.jpg")) == "/test-homes/me/photos")
+        #expect(search.location(of: file("/test-homes/me/Other/c.jpg")) == "Other")
+    }
+
+    @Test("Summarizes the roots for the search bar and lists their absolute paths in order")
+    func rootSummary() {
+        #expect(listing(root: "/test-homes/me/Pictures").rootSummary == .single("Pictures"))
+        #expect(listing(root: "/").rootSummary == .single("/"))
+        let search = listing(roots: ["/a/First", "/b/Second", "/"])
+        #expect(search.rootSummary == .multiple(first: "First", others: 2))
+        #expect(search.rootPaths == ["/a/First", "/b/Second", "/"])
+        #expect(search.root.path == "/a/First")
+    }
 }

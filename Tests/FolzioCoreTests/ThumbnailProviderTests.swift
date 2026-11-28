@@ -202,6 +202,31 @@ struct ThumbnailProviderTests {
         #expect(reader.snapshot().running == 0)
     }
 
+    // MARK: - Kept Thumbnails
+
+    @Test("cachedThumbnail returns a kept thumbnail only for the same URL, size, and version (FR-445)", .timeLimit(.minutes(1)))
+    func cachedThumbnailReturnsKeptImage() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FixtureSets.mixed(in: root)
+        let url = root.appendingPathComponent("mixed/01-photo.jpg")
+        let version = FileContentVersion(fileSize: 10, modificationDate: Date(timeIntervalSince1970: 1), fileIdentifier: 7)
+        let other = FileContentVersion(fileSize: 10, modificationDate: Date(timeIntervalSince1970: 2), fileIdentifier: 7)
+        let provider = ThumbnailProvider()
+
+        #expect(provider.cachedThumbnail(for: url, pointSize: 100, scale: 2, version: version) == nil)
+
+        let made = try #require(await provider.thumbnail(for: url, pointSize: 100, scale: 2, version: version))
+        let kept = try #require(provider.cachedThumbnail(for: url, pointSize: 100, scale: 2, version: version))
+        #expect(kept === made)
+        // A point size in the same pixel step (256) uses the same kept image.
+        #expect(provider.cachedThumbnail(for: url, pointSize: 120, scale: 2, version: version) === made)
+
+        #expect(provider.cachedThumbnail(for: url, pointSize: 300, scale: 2, version: version) == nil)
+        #expect(provider.cachedThumbnail(for: url, pointSize: 100, scale: 2, version: other) == nil)
+        #expect(provider.cachedThumbnail(for: url, pointSize: 100, scale: 2, version: nil) == nil)
+    }
+
     // MARK: - Content Versions
 
     @Test("The cache key distinguishes content versions of the same URL and pixel size (research.md R3)")

@@ -58,3 +58,10 @@ extension NSEvent {
         return relevant == [.command]
     }
 }
+
+/// Rows added at the end when `new` is `old` followed by more URLs, as while a search appends results in the order
+/// they are found (FR-085). Nil for any other change, including when `old` is empty.
+func appendedRows(from old: [URL], to new: [URL]) -> Range<Int>? {
+    guard !old.isEmpty, new.count > old.count, new[..<old.count].elementsEqual(old) else { return nil }
+    return old.count..<new.count
+}

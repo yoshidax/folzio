@@ -266,4 +266,107 @@ struct SearchRootInputTests {
         let adopted = state.complete(initial, succeeded: true)
         #expect(adopted)
     }
+
+    @Test("Adding appends an empty typed row up to ten rows and is rejected while the panel is open or work is pending")
+    func addingRows() throws {
+        var state = SearchPanelInputState(rootInput: .typed("/start"), keyword: "hit")
+        #expect(state.canAddRow(panelPresented: false))
+        #expect(!state.canRemoveRow(panelPresented: false), "A single row cannot be removed")
+        let result1 = state.removeRow(at: 0, panelPresented: false)
+        #expect(result1 == nil)
+
+        let revision = state.revision
+        let added = state.addRow(panelPresented: false)
+        #expect(added == 1)
+        #expect(state.rootInputs == [.typed("/start"), .typed("")])
+        #expect(state.revision == revision + 1)
+        #expect(state.canRemoveRow(panelPresented: false))
+
+        let result2 = state.addRow(panelPresented: true)
+        #expect(result2 == nil)
+        let ticket = try requireValue(state.beginInitialLocationResolution(row: 1, panelPresented: false))
+        let result3 = state.addRow(panelPresented: false)
+        #expect(result3 == nil)
+        let result4 = state.removeRow(at: 1, panelPresented: false)
+        #expect(result4 == nil)
+        state.complete(ticket, succeeded: false)
+
+        while state.rowCount < SearchPanelInputState.maximumRows {
+            _ = state.addRow(panelPresented: false)
+        }
+        #expect(state.rowCount == 10)
+        #expect(!state.canAddRow(panelPresented: false))
+        let result5 = state.addRow(panelPresented: false)
+        #expect(result5 == nil)
+    }
+
+    @Test("Removing a row keeps the other rows and their sources and returns the row to focus")
+    func removingRows() {
+        let picked = URL(fileURLWithPath: "/test-homes/me/Photos ", isDirectory: true)
+        var state = SearchPanelInputState(rootInput: .typed("/a"), keyword: "hit")
+        _ = state.addRow(panelPresented: false)
+        state.applyPickedRoot(picked, at: 1)
+        _ = state.addRow(panelPresented: false)
+        state.updateRootText("/c", at: 2)
+        #expect(state.rootInputs == [.typed("/a"), .picked(picked), .typed("/c")])
+
+        let result6 = state.removeRow(at: 0, panelPresented: false)
+        #expect(result6 == 0)
+        #expect(state.rootInputs == [.picked(picked), .typed("/c")])
+        let result7 = state.removeRow(at: 1, panelPresented: false)
+        #expect(result7 == 0, "Removing the last row focuses the new last row")
+        #expect(state.rootInputs == [.picked(picked)])
+        #expect(state.keyword == "hit")
+    }
+
+    @Test("Editing or picking changes only that row")
+    func rowEditsAreIndependent() {
+        var state = SearchPanelInputState(rootInput: .typed("/a"))
+        _ = state.addRow(panelPresented: false)
+        let picked = URL(fileURLWithPath: "/b", isDirectory: true)
+        state.applyPickedRoot(picked, at: 1)
+        state.updateRootText("/a2", at: 0)
+        #expect(state.rootInputs == [.typed("/a2"), .picked(picked)])
+        state.updateRootText("/x", at: 5)
+        #expect(state.rootInputs == [.typed("/a2"), .picked(picked)], "An index out of range is ignored")
+    }
+
+    @Test("Row tickets capture the row and all inputs; adding or removing a row rejects a stale search validation")
+    func rowTickets() throws {
+        var state = SearchPanelInputState(rootInput: .typed("/a"), keyword: "hit")
+        _ = state.addRow(panelPresented: false)
+        state.updateRootText("/b", at: 1)
+
+        let selection = try requireValue(
+            state.beginSelectionValidation(URL(fileURLWithPath: "/c", isDirectory: true), row: 1, panelPresented: false)
+        )
+        #expect(selection.row == 1)
+        #expect(selection.input == .typed("/b"))
+        state.complete(selection, succeeded: true)
+
+        let search = try requireValue(state.beginSearchValidation(panelPresented: false))
+        #expect(search.row == nil)
+        #expect(search.inputs == [.typed("/a"), .typed("/b")])
+        let result8 = state.addRow(panelPresented: false)
+        #expect(result8 == nil, "Rows cannot change during search validation")
+        let adopted = state.complete(search, succeeded: false)
+        #expect(adopted)
+
+        let stale = try requireValue(state.beginSearchValidation(panelPresented: false))
+        state.complete(stale, succeeded: false)
+        _ = state.addRow(panelPresented: false)
+        let staleAdopted = state.complete(stale, succeeded: true)
+        #expect(!staleAdopted)
+        #expect(state.isActive)
+    }
+
+    @Test("A row index out of range starts no operation")
+    func outOfRangeRow() {
+        var state = SearchPanelInputState(rootInput: .typed("/a"))
+        let result9 = state.beginInitialLocationResolution(row: 3, panelPresented: false)
+        #expect(result9 == nil)
+        let result10 = state.beginSelectionValidation(URL(fileURLWithPath: "/b"), row: 3, panelPresented: false)
+        #expect(result10 == nil)
+        #expect(state.pendingOperation == .idle)
+    }
 }

@@ -644,7 +644,13 @@ final class FileListViewController: NSViewController {
             return
         }
 
-        let rootName = search.root.path == "/" ? "/" : search.root.lastPathComponent
+        let rootName: String
+        switch search.rootSummary {
+        case let .single(name):
+            rootName = name
+        case let .multiple(first, others):
+            rootName = l10n.text(.searchBarMultipleRoots, .text(first), .number(others))
+        }
         let shownCount = model.listing.files.count
         let count = shownCount != search.totalCount
             ? l10n.text(
@@ -672,7 +678,9 @@ final class FileListViewController: NSViewController {
             searchBarSpinner.stopAnimation(nil)
         }
         searchBarLabel.stringValue = text
-        searchBarLabel.toolTip = text
+        // The tooltip adds the absolute path of every root, one per line, so roots with the same name can be told
+        // apart (FR-084, FR-439).
+        searchBarLabel.toolTip = ([text] + search.rootPaths).joined(separator: "\n")
         searchBarLabel.setAccessibilityValue(text)
         searchBar.isHidden = false
         searchBarHeightConstraint?.constant = 24

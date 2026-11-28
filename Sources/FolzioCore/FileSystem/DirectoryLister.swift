@@ -77,22 +77,24 @@ public struct DirectoryLister: DirectoryListing {
             }
 
             return urls.compactMap { url -> MediaFile? in
+                // Read values from the listed URL, which holds the prefetched values, and give the row a rebuilt URL
+                // that is cheap to hash and compare on the main thread (PlainFileURL).
                 let values = try? url.resourceValues(forKeys: Self.fileKeys)
                 if values?.isDirectory == true {
                     // As in the tree, do not show packages (such as .app) as folders (R29).
                     // isPackage is expensive, so query it only for directories.
                     guard (try? url.resourceValues(forKeys: [.isPackageKey]))?.isPackage != true else { return nil }
                     return Self.folderRow(
-                        at: url, creationDate: values?.creationDate,
+                        at: PlainFileURL.make(url), creationDate: values?.creationDate,
                         modificationDate: values?.contentModificationDate, kindNames: kindNames
                     )
                 }
 
                 if Self.isArchive(url) {
-                    return Self.archiveRow(at: url, values: values, kindNames: kindNames)
+                    return Self.archiveRow(at: PlainFileURL.make(url), values: values, kindNames: kindNames)
                 }
                 guard let kind = MediaKind(fileExtension: url.pathExtension) else { return nil }
-                return Self.mediaFile(at: url, kind: kind, values: values)
+                return Self.mediaFile(at: PlainFileURL.make(url), kind: kind, values: values)
             }
         }
     }
@@ -144,12 +146,19 @@ public struct DirectoryLister: DirectoryListing {
         mediaFile(at: url, kind: kind, values: try? url.resourceValues(forKeys: mediaKeys))
     }
 
-    private static func mediaFile(at url: URL, kind: MediaKind, values: URLResourceValues?) -> MediaFile {
+    /// Resource keys a media row needs besides its kind name. `FileNameSearcher` prefetches them while enumerating.
+    static let mediaRowValueKeys: Set<URLResourceKey> = mediaKeys.subtracting([.localizedTypeDescriptionKey])
+
+    /// Builds a media file row from values that were already read. `typeDescription` replaces
+    /// `localizedTypeDescription` when given, so a search can read the kind name once per extension (research.md R7).
+    static func mediaFile(
+        at url: URL, kind: MediaKind, values: URLResourceValues?, typeDescription: String? = nil
+    ) -> MediaFile {
         MediaFile(
             url: url,
             name: url.lastPathComponent,
             kind: .media(kind),
-            typeDescription: values?.localizedTypeDescription ?? kind.rawValue.uppercased(),
+            typeDescription: typeDescription ?? values?.localizedTypeDescription ?? kind.rawValue.uppercased(),
             creationDate: values?.creationDate,
             modificationDate: values?.contentModificationDate,
             fileSize: Int64(values?.fileSize ?? 0),

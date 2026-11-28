@@ -4,6 +4,8 @@ import os
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Logs main-thread stalls when enabled with a user default (TAK-129 measurement).
+    private let stallMonitor = MainThreadStallMonitor()
     private let performanceSignposter = OSSignposter(
         subsystem: "local.folzio.Folzio",
         category: "Performance"
@@ -28,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         launchToListState = performanceSignposter.beginInterval("LaunchToList")
+        stallMonitor.startIfEnabled()
 
         NSWindow.allowsAutomaticWindowTabbing = false
         MainMenu.install(zoomTarget: self)

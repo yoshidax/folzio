@@ -322,6 +322,8 @@ struct BrowserModelSearchTests {
             searcher: searcher
         )
         model.setNavigationRoots([root])
+        // Add each batch at once; tests of the reflection interval set their own (FR-085).
+        model.searchReflectionInterval = { _ in .zero }
         return Env(root: root, defaults: defaults, suite: suite, model: model, searcher: searcher)
     }
 
@@ -422,7 +424,7 @@ struct BrowserModelSearchTests {
 
     // MARK: - Batches and Completion
 
-    @Test("Merges batches in sort order, preserves selection and focus, and includes no .. or folder rows")
+    @Test("Appends batches in found order, sorts once at the end, keeps selection and focus, and adds no .. row (FR-085, FR-444)")
     func batchesMergeAndKeepSelection() async throws {
         let env = try makeEnv()
         defer { env.cleanup() }
@@ -441,7 +443,17 @@ struct BrowserModelSearchTests {
 
         await send([a, c], env, expecting: 4)
 
+        // While searching, results stay in the order they were found.
+        #expect(names(env.model) == ["b.jpg", "d.jpg", "a.jpg", "c.jpg"])
+        #expect(env.model.listing.state == .loaded)
+        #expect(env.model.selection.selected == [b.url])
+        #expect(env.model.selection.focused == b.url)
+
+        let generation = env.model.searchOrderGeneration
+        await finish(env)
+
         #expect(names(env.model) == ["a.jpg", "b.jpg", "c.jpg", "d.jpg"])
+        #expect(env.model.searchOrderGeneration == generation + 1)
         #expect(env.model.listing.state == .loaded)
         #expect(env.model.selection.selected == [b.url])
         #expect(env.model.selection.focused == b.url)
@@ -608,6 +620,7 @@ struct BrowserModelSearchTests {
         let y = try env.makeResult("a/z.jpg")
         env.model.startSearch(pattern(), root: env.root)
         await send([x, y], env, expecting: 2)
+        await finish(env)
         #expect(names(env.model) == ["a.jpg", "z.jpg"])
 
         env.model.sortOrder = SortOrder(column: .location, ascending: true)
@@ -699,6 +712,7 @@ struct BrowserModelSearchTests {
         let dog = try env.makeResult("s/dog.jpg")
         env.model.startSearch(pattern(), root: env.root)
         await send([cat, dog], env, expecting: 2)
+        await finish(env)
         env.model.select([cat.url], focused: cat.url)
 
         let kitten = env.url("s/kitten.jpg")
@@ -1776,6 +1790,283 @@ struct BrowserModelSearchTests {
         let row = try #require(env.model.listing.files.first)
         #expect(row.name == "bbb")
         #expect(path(row.url) == path(new))
+    }
+
+    // MARK: - Found Order and the Final Sort (TAK-129)
+
+    @Test("Reflection intervals grow with the listed count and never exceed one second (FR-085)")
+    func reflectionIntervals() {
+        #expect(SearchReflection.interval(forListedCount: 0) == .milliseconds(100))
+        #expect(SearchReflection.interval(forListedCount: 999) == .milliseconds(100))
+        #expect(SearchReflection.interval(forListedCount: 1_000) == .milliseconds(250))
+        #expect(SearchReflection.interval(forListedCount: 10_000) == .milliseconds(500))
+        #expect(SearchReflection.interval(forListedCount: 30_000) == .seconds(1))
+        #expect(SearchReflection.interval(forListedCount: 1_000_000) <= SearchReflection.maximumInterval)
+        #expect(SearchReflection.maximumInterval == .seconds(1))
+    }
+
+    @Test("A batch waits for the reflection interval and then appears within one second (FR-085)")
+    func batchWaitsForReflectionInterval() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        env.model.searchReflectionInterval = { _ in .milliseconds(300) }
+        let a = try env.makeResult("s/a.jpg")
+        env.model.startSearch(pattern(), root: env.root)
+        env.searcher.send([a])
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(env.model.listing.files.isEmpty, "The batch is shown before the interval: \(names(env.model))")
+
+        let start = ContinuousClock.now
+        #expect(await waitUntil(timeout: .seconds(2)) { env.model.listing.search?.totalCount == 1 })
+        #expect(ContinuousClock.now - start < .seconds(1))
+        #expect(names(env.model) == ["a.jpg"])
+    }
+
+    @Test("A search that finishes within the interval shows only the sorted results (EC-313)")
+    func shortSearchShowsOnlySortedResults() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        env.model.searchReflectionInterval = { _ in .seconds(5) }
+        let b = try env.makeResult("s/b.jpg")
+        let a = try env.makeResult("s/a.jpg")
+        env.model.startSearch(pattern(), root: env.root)
+        env.searcher.send([b, a])
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(env.model.listing.files.isEmpty)
+
+        await finish(env)
+        #expect(names(env.model) == ["a.jpg", "b.jpg"])
+        #expect(env.model.listing.search?.totalCount == 2)
+    }
+
+    @Test("Changing the sort order while searching sorts the results so far and appends later ones (US102-AS7)")
+    func sortOrderChangeWhileSearching() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let b = try env.makeResult("s/b.jpg")
+        let d = try env.makeResult("s/d.jpg")
+        let a = try env.makeResult("s/a.jpg")
+        let c = try env.makeResult("s/c.jpg")
+        env.model.startSearch(pattern(), root: env.root)
+        await send([b, d, a], env, expecting: 3)
+        #expect(names(env.model) == ["b.jpg", "d.jpg", "a.jpg"])
+
+        env.model.sortOrder = SortOrder(column: .name, ascending: false)
+        #expect(await waitUntil { names(env.model) == ["d.jpg", "b.jpg", "a.jpg"] }, "Listing: \(names(env.model))")
+        #expect(env.model.listing.search?.phase == .searching)
+
+        await send([c], env, expecting: 4)
+        #expect(names(env.model) == ["d.jpg", "b.jpg", "a.jpg", "c.jpg"])
+
+        await finish(env)
+        #expect(names(env.model) == ["d.jpg", "c.jpg", "b.jpg", "a.jpg"])
+    }
+
+    @Test("A rename while the results are being sorted is kept in the sorted results")
+    func renameDuringSortIsKept() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let cat = try env.makeResult("s/cat.jpg")
+        let dog = try env.makeResult("s/dog.jpg")
+        env.model.startSearch(pattern(), root: env.root)
+        await send([dog, cat], env, expecting: 2)
+
+        // The sort runs off the main thread, so the rename lands before it is applied and the sort starts over.
+        env.model.sortOrder = SortOrder(column: .name, ascending: false)
+        let kitten = env.url("s/kitten.jpg")
+        try FileManager.default.moveItem(at: cat.url, to: kitten)
+        env.model.didRenameItem(at: cat.url, to: kitten)
+
+        #expect(await waitUntil { names(env.model) == ["kitten.jpg", "dog.jpg"] }, "Listing: \(names(env.model))")
+        await finish(env)
+        #expect(names(env.model) == ["kitten.jpg", "dog.jpg"])
+    }
+
+    @Test("Stopping a search does not sort the results or advance the search order generation (EC-312)")
+    func stoppingSearchDoesNotSort() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let b = try env.makeResult("s/b.jpg")
+        let a = try env.makeResult("s/a.jpg")
+        let generation = env.model.searchOrderGeneration
+        env.model.startSearch(pattern(), root: env.root)
+        await send([b, a], env, expecting: 2)
+
+        env.model.startSearch(pattern("z"), root: env.root)
+        #expect(env.model.listing.files.isEmpty)
+        await env.model.selectFolder(env.folder("trip"))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(env.model.searchOrderGeneration == generation)
+        #expect(!env.model.isShowingSearchResults)
+    }
+
+    @Test("Added rows are filtered by the media type filter and the name filter while searching")
+    func filtersApplyToAppendedRows() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let clip = try env.makeResult("s/clip.mp4")
+        let photo = try env.makeResult("s/photo.jpg")
+        let image = try env.makeResult("s/image.jpg")
+        env.model.setMediaTypeFilter(MediaTypeFilter(imagesOnly: true))
+        env.model.startSearch(pattern("*"), root: env.root)
+        await send([clip, photo], env, expecting: 2)
+        #expect(names(env.model) == ["photo.jpg"])
+
+        await send([image], env, expecting: 3)
+        #expect(names(env.model) == ["photo.jpg", "image.jpg"])
+        #expect(env.model.listing.state == .loaded)
+
+        await finish(env)
+        #expect(names(env.model) == ["image.jpg", "photo.jpg"])
+    }
+
+    @Test("Renaming a file or a folder row while searching keeps its position until the final sort (EC-314)")
+    func renameWhileSearchingKeepsPosition() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let cat = try env.makeResult("s/cat.jpg")
+        let dog = try env.makeResult("s/dog.jpg")
+        let folder = try makeFolderResult(env, "trip/zzz")
+        env.model.startSearch(pattern("*"), root: env.root)
+        await send([cat, dog, folder], env, expecting: 3)
+        env.model.select([cat.url], focused: cat.url)
+
+        let kitten = env.url("s/kitten.jpg")
+        try FileManager.default.moveItem(at: cat.url, to: kitten)
+        env.model.didRenameItem(at: cat.url, to: kitten)
+        #expect(names(env.model) == ["kitten.jpg", "dog.jpg", "zzz"])
+        #expect(env.model.selection.focused == kitten)
+
+        let (old, new) = try renameFolder(env, "trip/zzz", to: "aaa")
+        env.model.didRenameFolder(from: old, to: new)
+        #expect(names(env.model) == ["kitten.jpg", "dog.jpg", "aaa"])
+
+        // The rename below the root started another enumeration; the search ends when both finish.
+        for index in env.searcher.requests.indices {
+            env.searcher.finish(at: index)
+        }
+        #expect(await waitUntil { env.model.listing.search?.phase == .finished })
+        // Name sorting lists folder rows first (FR-288).
+        #expect(names(env.model) == ["aaa", "dog.jpg", "kitten.jpg"])
+        #expect(env.model.selection.focused == kitten)
+    }
+
+    // MARK: - Several Roots (TAK-104; FR-438, FR-440)
+
+    @Test("Enumerates several roots one at a time and combines their results into one search (FR-438)")
+    func severalRootsInOrder() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let first = env.folder("trip/day1")
+        let second = env.folder("trip/day2")
+        env.model.startSearch(pattern(), roots: [first, second])
+
+        #expect(env.searcher.requests.count == 1)
+        #expect(path(env.searcher.requests.first?.root) == path(first))
+        #expect(env.model.listing.search?.roots.map(path) == [path(first), path(second)])
+
+        env.searcher.send([Env.result(env.url("trip/day1/a.jpg"))], to: 0)
+        #expect(await waitUntil { env.model.listing.search?.totalCount == 1 })
+        env.searcher.finish(at: 0)
+        #expect(await waitUntil { env.searcher.requests.count == 2 })
+        #expect(path(env.searcher.requests.last?.root) == path(second))
+        #expect(env.searcher.requests.last?.matchesRoot == false)
+        #expect(env.model.listing.search?.phase == .searching)
+
+        env.searcher.send([Env.result(env.url("trip/day2/b.jpg"))], to: 1)
+        #expect(await waitUntil { env.model.listing.search?.totalCount == 2 })
+        env.searcher.finish(at: 1)
+        #expect(await waitUntil { env.model.listing.search?.phase == .finished })
+        #expect(Set(names(env.model)) == ["a.jpg", "b.jpg"])
+        #expect(env.searcher.requests.count == 2)
+    }
+
+    @Test("A new search drops the waiting roots of the previous search")
+    func newSearchDropsWaitingRoots() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        env.model.startSearch(pattern(), roots: [env.folder("trip/day1"), env.folder("trip/day2")])
+        env.model.startSearch(pattern("b"), root: env.folder("empty"))
+        #expect(env.searcher.requests.count == 2)
+
+        env.searcher.finish(at: 0)
+        env.searcher.finish(at: 1)
+        #expect(await waitUntil { env.model.listing.search?.phase == .finished })
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(env.searcher.requests.count == 2)
+        #expect(env.model.listing.search?.roots.map(path) == [path(env.folder("empty"))])
+    }
+
+    @Test("Renaming a waiting root, or a folder inside it, only rewrites the root without an additional enumeration (FR-440)")
+    func renamingWaitingRoot() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        _ = try makeEmptyFolder(env, "trip/day2/sub")
+        env.model.startSearch(pattern(), roots: [env.folder("trip/day1"), env.folder("trip/day2")])
+
+        let (oldSub, newSub) = try renameFolder(env, "trip/day2/sub", to: "sub2")
+        env.model.didRenameFolder(from: oldSub, to: newSub)
+        #expect(env.searcher.requests.count == 1)
+
+        let (old, new) = try renameFolder(env, "trip/day2", to: "day2b")
+        env.model.didRenameFolder(from: old, to: new)
+        #expect(env.searcher.requests.count == 1)
+        #expect(env.model.listing.search?.roots.map(path) == [path(env.folder("trip/day1")), path(new)])
+
+        env.searcher.finish(at: 0)
+        #expect(await waitUntil { env.searcher.requests.count == 2 })
+        #expect(path(env.searcher.requests.last?.root) == path(new))
+    }
+
+    @Test("Renaming one started root rewrites only that root and its results (FR-440)")
+    func renamingOneOfSeveralRoots() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let photo = try env.makeResult("trip/day2/b.jpg")
+        env.model.startSearch(pattern(), roots: [env.folder("trip/day1"), env.folder("trip/day2")])
+        env.searcher.finish(at: 0)
+        #expect(await waitUntil { env.searcher.requests.count == 2 })
+        env.searcher.send([photo], to: 1)
+        #expect(await waitUntil { env.model.listing.search?.totalCount == 1 })
+        env.searcher.finish(at: 1)
+        #expect(await waitUntil { env.model.listing.search?.phase == .finished })
+
+        let (old, new) = try renameFolder(env, "trip/day2", to: "day2b")
+        env.model.didRenameFolder(from: old, to: new)
+
+        let search = try #require(env.model.listing.search)
+        #expect(search.roots.map(path) == [path(env.folder("trip/day1")), path(new)])
+        #expect(path(env.model.listing.files.first?.url) == path(new.appendingPathComponent("b.jpg")))
+        #expect(search.location(of: new.appendingPathComponent("b.jpg")) == "day2b")
+    }
+
+    @Test("A root that disappears removes only its own results; when every root is gone the results are empty (EC-306)")
+    func oneOfSeveralRootsDisappears() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        let firstRoot = env.folder("s1")
+        let secondRoot = env.folder("s2")
+        let kept = try env.makeResult("s1/x/a.jpg")
+        let gone = try env.makeResult("s2/y/b.jpg")
+        env.model.startSearch(pattern(), roots: [firstRoot, secondRoot])
+        env.searcher.send([kept], to: 0)
+        env.searcher.finish(at: 0)
+        #expect(await waitUntil { env.searcher.requests.count == 2 })
+        env.searcher.send([gone], to: 1)
+        #expect(await waitUntil { env.model.listing.search?.totalCount == 2 })
+        env.searcher.finish(at: 1)
+        #expect(await waitUntil { env.model.listing.search?.phase == .finished })
+
+        try FileManager.default.removeItem(at: secondRoot)
+        await env.model.handleFileSystemEvent([secondRoot])
+        #expect(env.model.isShowingSearchResults)
+        #expect(names(env.model) == ["a.jpg"])
+
+        try FileManager.default.removeItem(at: firstRoot)
+        await env.model.handleFileSystemEvent([firstRoot])
+        #expect(env.model.isShowingSearchResults)
+        #expect(env.model.listing.files.isEmpty)
+        #expect(env.model.listing.state == .empty)
     }
 }
 

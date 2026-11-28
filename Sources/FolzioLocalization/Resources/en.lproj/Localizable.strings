@@ -579,7 +579,7 @@
 "search.heading" = "Search Including Subfolders";
 
 /* Note below the search sheet heading. Also the accessibility help of the keyword field */
-"search.description" = "Finds files and folders whose names match, in the folder you search in and all of its subfolders.";
+"search.description" = "Finds files and folders whose names match, in the folders you search in and all of their subfolders.";
 
 /* Search sheet keyword label, placeholder, and accessibility text */
 "search.keyword" = "Keyword";
@@ -616,6 +616,30 @@
 
 /* Searching-state sentence in the search bar. %1$@ is the keyword, %2$@ is the search root folder name, and %3$@ is the count phrase */
 "search.bar.searching" = "Results for “%1$@” — %2$@ — %3$@ Searching…";
+
+/* Note below the search sheet keyword field explaining the wildcards */
+"search.wildcardHint" = "* matches any number of characters and ? matches one character. With * or ?, the whole name must match.";
+
+/* Search sheet button that adds a search root row */
+"search.addRoot" = "Add Folder";
+
+/* Search sheet button that removes its search root row */
+"search.removeRoot" = "Remove";
+
+/* Accessibility label of a search root field when there are several rows. %1$@ is the row number */
+"search.root.numbered" = "Search In %1$@";
+
+/* Accessibility label of a row's folder selection button. %1$@ is the row number */
+"search.choose.numbered" = "Choose Folder %1$@";
+
+/* Accessibility label of a row's remove button. %1$@ is the row number */
+"search.removeRoot.numbered" = "Remove Folder %1$@";
+
+/* Reason when one of several search roots is invalid. %1$@ is the row number and %2$@ is the reason */
+"search.error.numbered" = "Folder %1$@: %2$@";
+
+/* Search root part of the search bar with several roots. %1$@ is the first folder name and %2$@ is the number of other roots */
+"search.bar.multipleRoots" = "%1$@ and %2$@ more";
 
 /* Title for the rename confirmation */
 "dialog.confirm.rename" = "Rename this item?";

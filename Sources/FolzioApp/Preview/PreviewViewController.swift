@@ -334,6 +334,8 @@ final class PreviewViewController: NSViewController {
                 decoded,
                 fileName: model.selection.focused?.lastPathComponent ?? ""
             )
+            let name = model.selection.focused?.lastPathComponent ?? "-"
+            PerformanceLog.logger.debug("[preview] shown \(name, privacy: .private(mask: .hash))")
         case let .animatedImage(url):
             stopVideo()
             showImageView()

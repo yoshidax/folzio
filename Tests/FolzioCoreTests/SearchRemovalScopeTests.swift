@@ -82,4 +82,28 @@ struct SearchRemovalScopeTests {
         let existing: Set<String> = ["/", "/a"]
         #expect(topmost("/a/b/c/d.jpg", root: nil, existing: existing, known: &known, checks: &checks) == "/a/b")
     }
+
+    @Test("With several roots, stops at the root that contains the result and records only that root (EC-306)")
+    func severalRoots() {
+        let search = SearchListing(
+            keyword: "cat",
+            roots: [
+                URL(fileURLWithPath: "/search/a", isDirectory: true),
+                URL(fileURLWithPath: "/search/b", isDirectory: true),
+            ],
+            phase: .finished,
+            totalCount: 0
+        )
+        var known: [String: Bool] = [:]
+        var checks = 0
+        // Root b and its folders are gone; root a still exists.
+        let existing: Set<String> = ["/", "/search", "/search/a", "/search/a/x"]
+        let inB = URL(fileURLWithPath: "/search/b/x/a.jpg")
+        #expect(topmost(inB.path, root: search.root(containing: inB), existing: existing, known: &known, checks: &checks)
+            == "/search/b")
+        let inA = URL(fileURLWithPath: "/search/a/x/gone.jpg")
+        #expect(topmost(inA.path, root: search.root(containing: inA), existing: existing, known: &known, checks: &checks)
+            == "/search/a/x/gone.jpg")
+        #expect(!SearchRemovalScope.contains(URL(fileURLWithPath: "/search/a/x/kept.jpg"), in: ["/search/b"]))
+    }
 }

@@ -407,11 +407,23 @@ The toolbar search field filters the list you are viewing by name. To look throu
 - Press ⌥⌘F or choose File → "Find…" (検索…).
 - A modal asks for a "Keyword" and "Search In".
   - The modal is titled "Search Including Subfolders". It looks through the start folder and all of its subfolders.
+  - A note below the keyword field explains the wildcards (`*` and `?`).
   - The start folder defaults to the absolute path of the folder shown in the file list.
   - The keyword is pre-filled, fully selected, with the previous search from the same session.
   - The start folder must be a path starting with `/` or `~`.
   - If the path does not exist, is not a folder (including zip files), or cannot be read,
     the modal shows the reason.
+
+### Several Start Folders
+
+- "Add Folder" (起点を追加) adds a start folder row, so you can search several places at once. Up to 10 rows.
+- "Remove" (削除) on a row removes it. The only row cannot be removed.
+- Empty rows are ignored. If any row is invalid, the search does not start, and the modal shows which row and why.
+- If you give the same folder twice, or a folder inside another start folder, each item still appears once.
+- The start folders are searched one at a time from the top. The results form one list.
+- The search bar shows "{first folder} and {n} more", and its tooltip lists the paths of all start folders.
+- The Location column starts from the folder name of the start folder that contains the item.
+  When two start folders have the same name, it starts from the start folder's absolute path.
 
 ### Choosing the Start Folder
 
@@ -425,11 +437,12 @@ The toolbar search field filters the list you are viewing by name. To look throu
   - Hidden items can be shown with ⌘⇧. as usual, and hidden folders can be chosen.
 - The existing validation rules for typed paths are unchanged.
 - Keyboard:
-  - Tab moves keyword → start folder → Choose… → Cancel → Search.
+  - Tab moves keyword → each row's start folder → Choose… → Remove → Add Folder → Cancel → Search.
+    A disabled "Remove" or "Add Folder" is skipped.
   - Space opens "Choose…".
   - Return, Esc, and navigation inside the standard panel behave as usual in macOS.
     Return and Esc there affect only the panel.
-  - Closing the panel returns focus to "Choose…".
+  - Closing the panel returns focus to that row's "Choose…".
 - Trailing spaces in a folder name chosen in the GUI are kept as long as you do not edit the field.
   If you edit the field directly, leading and trailing spaces are trimmed as before.
 
@@ -455,9 +468,10 @@ The toolbar search field filters the list you are viewing by name. To look throu
 ### Search Results
 
 - Results appear in the file list as a single list that mixes files and folders.
-  - They are added in the order they are found and sorted by the current sort.
+  - While searching, they are added to the end of the list in the order they are found.
+  - When the search finishes, they are sorted by the current sort. A selected item stays in view.
   - When sorting by name, folders are grouped first.
-  - You can keep working while it searches.
+  - You can keep working while it searches. Changing the sort while searching sorts the results found so far.
 - List view gets a "Location" (場所) column, the folder relative to the start folder.
   It can also be used for sorting.
 - Thumbnail view shows the location as a tooltip.

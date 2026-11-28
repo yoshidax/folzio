@@ -536,4 +536,35 @@ extension FileNameSearcherTests {
             #expect(rows.first?.kind == .folder)
         }
     }
+
+    @Test("Search rows have the same kind names, dates, sizes, and content versions as folder listing rows (research.md R7)")
+    func searchRowsMatchListingRows() async throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FileNameSearcherTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let folder = base.appendingPathComponent("rows", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // The same extension in different cases, and different extensions, so the per-extension kind name is reused
+        // and also read again for a new extension.
+        try ImageFixtures.jpeg(at: folder.appendingPathComponent("a.jpg"), width: 8, height: 8)
+        try ImageFixtures.jpeg(at: folder.appendingPathComponent("b.JPG"), width: 16, height: 16)
+        try ImageFixtures.png(at: folder.appendingPathComponent("c.png"), width: 8, height: 8)
+        FileManager.default.createFile(atPath: folder.appendingPathComponent("d.mp4").path, contents: Data([0, 1, 2]))
+
+        let found = try await collect(in: base, "*").flatMap { $0 }.filter { $0.kind.isMedia }
+        let listed = try await DirectoryLister(kindNames: FixtureKit.kindNames).mediaFiles(in: folder)
+            .filter { $0.kind.isMedia }
+        #expect(found.count == 4)
+        #expect(listed.count == 4)
+        let listedByName = Dictionary(uniqueKeysWithValues: listed.map { ($0.name, $0) })
+        for row in found {
+            let expected = try #require(listedByName[row.name], "No listing row for \(row.name)")
+            #expect(row.kind == expected.kind, "\(row.name)")
+            #expect(row.typeDescription == expected.typeDescription, "\(row.name)")
+            #expect(row.creationDate == expected.creationDate, "\(row.name)")
+            #expect(row.modificationDate == expected.modificationDate, "\(row.name)")
+            #expect(row.fileSize == expected.fileSize, "\(row.name)")
+            #expect(row.contentVersion == expected.contentVersion, "\(row.name)")
+        }
+    }
 }

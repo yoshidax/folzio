@@ -285,6 +285,14 @@ public enum TextKey: String, CaseIterable, Sendable {
     case searchBarSearching = "search.bar.searching"
     case searchBarCount = "search.bar.count"
     case searchBarCountLimited = "search.bar.countLimited"
+    case searchWildcardHint = "search.wildcardHint"
+    case searchAddRoot = "search.addRoot"
+    case searchRemoveRoot = "search.removeRoot"
+    case searchRootNumbered = "search.root.numbered"
+    case searchChooseNumbered = "search.choose.numbered"
+    case searchRemoveRootNumbered = "search.removeRoot.numbered"
+    case searchErrorNumbered = "search.error.numbered"
+    case searchBarMultipleRoots = "search.bar.multipleRoots"
 
     // MARK: - Confirmation Modals and Dialogs
 
@@ -484,6 +492,12 @@ public enum TextKey: String, CaseIterable, Sendable {
             return [.count]
         case .searchBarCountLimited:
             return [.count, .text]
+        case .searchRootNumbered, .searchChooseNumbered, .searchRemoveRootNumbered:
+            return [.number]
+        case .searchErrorNumbered:
+            return [.number, .text]
+        case .searchBarMultipleRoots:
+            return [.text, .number]
         case .dialogConfirmItems, .dialogConfirmMore, .dialogConflictItems, .dialogOperationMore:
             return [.number]
         case .dialogOperationSummary:
@@ -930,6 +944,22 @@ public enum TextKey: String, CaseIterable, Sendable {
             return "Count phrase in the search bar. The wording changes with the count"
         case .searchBarCountLimited:
             return "Count phrase in the search bar (truncated at the limit). The wording changes with the count, and the displayed count is inserted as a value"
+        case .searchWildcardHint:
+            return "Note below the search sheet keyword field explaining the * and ? wildcards. Keep * and ? as they are"
+        case .searchAddRoot:
+            return "Search sheet button that adds another search root row"
+        case .searchRemoveRoot:
+            return "Search sheet button that removes its search root row"
+        case .searchRootNumbered:
+            return "Accessibility label of a search root field when there are several rows. The value is the row number"
+        case .searchChooseNumbered:
+            return "Accessibility label of a row's folder selection button when there are several rows. The value is the row number"
+        case .searchRemoveRootNumbered:
+            return "Accessibility label of a row's remove button when there are several rows. The value is the row number"
+        case .searchErrorNumbered:
+            return "Reason shown in the search sheet when one of several search roots is invalid. Values are the row number and the reason"
+        case .searchBarMultipleRoots:
+            return "Search root part of the search bar sentence when there are several roots. Values are the first root's folder name and the number of other roots"
         case .dialogConfirmCopy, .dialogConfirmMove:
             return "Title for the copy or move confirmation. The wording changes with the count, but the count is not shown"
         case .dialogConfirmRename, .dialogConfirmTrash:
